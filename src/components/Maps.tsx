@@ -1,109 +1,80 @@
 "use client";
 
-import React,{useRef, useEffect} from "react";
-import mapboxgl from "mapbox-gl";
+import React, { useEffect, useRef } from 'react';
+import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
-const Map = ()=>{
-    const mapContainerRef = useRef<HTMLDivElement>(null);
-
-    const mapRef = useRef<mapboxgl.Map | null>(null);
-
-    useEffect(()=>{
-        if (mapRef.current) return;
-
-        if (mapContainerRef.current){
-            mapRef.current = new mapboxgl.Map({
-                container: mapContainerRef.current,
-                style: 'mapbox://styles/mapbox/streets-v11',
-                center: [-74.006, 40.7128], // NYC
-                zoom: 15.5, // Zoomed in closer to see buildings
-                pitch: 55, // Steeper pitch to look "through" the city
-                bearing: -17.6, // Rotate slightly for a better angle
-                antialias: true // Makes the 3D edges look smoother
-            })
-            mapRef.current.on('load', ()=>{
-                if (!mapRef.current) return;
-                
-                //1.insert the 3d buildings
-                mapRef.current.addLayer({
-                'id': '3d-buildings',
-                'source': 'composite',
-                'source-layer': 'building',
-                'filter': ['==', 'extrude', 'true'], // Only select items marked as 'extrude'
-                'type': 'fill-extrusion',
-                'minzoom': 15,
-                'paint': {
-                // Color the buildings a dark grey to match the theme
-                'fill-extrusion-color': '#2a2a2a',
-
-                // Use 'interpolate' to transition the height smoothly as you zoom
-                'fill-extrusion-height': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                15,
-                0,
-                15.05,
-                ['get', 'height'] // Get real-world height from data
-                ],
-                'fill-extrusion-base': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                15,
-                0,
-                15.05,
-                ['get', 'min_height']
-                ],
-                'fill-extrusion-opacity': 0.8
-            }
-                })
-                //2.add some atmosphere
-                mapRef.current.addLayer({
-                    'id': 'atmosphere',
-                    'source': 'composite',
-                    'source-layer': 'building',
-                    'type': 'fill-extrusion',
-                    'minzoom': 15,
-                    'paint': {
-                        'fill-extrusion-color': '#2a2a2a',
-                        'fill-extrusion-height': [
-                            'interpolate',
-                            ['linear'],
-                            ['zoom'],
-                            15,
-                            0,
-                            15.05,
-                            ['get', 'height']
-                        ],
-                        'fill-extrusion-base': [
-                            'interpolate',
-                            ['linear'],
-                            ['zoom'],
-                            15,
-                            0,
-                            15.05,
-                            ['get', 'min_height']
-                        ],
-                        'fill-extrusion-opacity': 0.8
-                    }
-                })
-            })
-        }
-
-        return ()=>{
-            mapRef.current?.remove();
-        };
-
-
-    },[]);
-
-    return(
-        <div ref={mapContainerRef} className="w-full h-screen"/>
-    )
+// Define the shape of our props
+interface MapProps {
+  viewState: {
+    longitude: number;
+    latitude: number;
+    zoom: number;
+  };
 }
+
+const Map = ({ viewState }: MapProps) => { // Receive props here
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+
+  // 1. Initialize Map (Runs once)
+  useEffect(() => {
+    if (mapRef.current) return;
+    if (mapContainerRef.current) {
+      mapRef.current = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [viewState.longitude, viewState.latitude], // Use prop
+        zoom: viewState.zoom, // Use prop
+        pitch: 55,
+        bearing: -17.6,
+        antialias: true
+      });
+
+      mapRef.current.on('load', () => {
+        if (!mapRef.current) return;
+        mapRef.current.addLayer({
+          'id': '3d-buildings',
+          'source': 'composite',
+          'source-layer': 'building',
+          'filter': ['==', 'extrude', 'true'],
+          'type': 'fill-extrusion',
+          'minzoom': 15,
+          'paint': {
+            'fill-extrusion-color': '#2a2a2a',
+            'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['get', 'height']],
+            'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['get', 'min_height']],
+            'fill-extrusion-opacity': 0.8
+          }
+        });
+        
+        mapRef.current.setFog({
+            'range': [0.5, 10],
+            'color': '#242b4b',
+            'high-color': '#161b33',
+            'space-color': '#0b0e1f'
+        });
+      });
+    }
+    return () => { mapRef.current?.remove(); };
+  }, []); // Empty dependency array = runs once on mount
+
+  // 2. React to Changes (Runs whenever viewState changes)
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+    // The "Fly" animation
+    mapRef.current.flyTo({
+      center: [viewState.longitude, viewState.latitude],
+      zoom: viewState.zoom,
+      essential: true, // Animation will happen even if user prefers reduced motion
+      duration: 3000 // 3 seconds flight time
+    });
+  }, [viewState]); // Dependency: run this when viewState changes
+
+  return <div ref={mapContainerRef} className="w-full h-screen" />;
+};
 
 export default Map;
