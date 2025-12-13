@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, Search, MapPin, Camera, Sun, Moon } from "lucide-react";
+import { Loader2, Sparkles, Search, MapPin, Camera, Sun, Moon, Mic, MicOff } from "lucide-react";
 
 const COOLDOWN_DURATION = 10;
 const WEATHER_ICONS: Record<string, string> = {
@@ -37,6 +37,10 @@ interface ControlPanelProps {
   onToggleOrbit: () => void;
   time: number;
   onTimeChange: (val: number) => void;
+  // Voice control props
+  onVoiceStart: () => void;
+  isListening: boolean;
+  lastCommand: string;
 }
 
 // Helper to format time (e.g. 14.5 -> "14:30")
@@ -104,6 +108,9 @@ const ControlPanel = ({
   onToggleOrbit,
   time,
   onTimeChange,
+  onVoiceStart,
+  isListening,
+  lastCommand,
 }: ControlPanelProps) => {
   const [searchInput, setSearchInput] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -174,6 +181,20 @@ const ControlPanel = ({
               </Button>
             </form>
 
+            {/* Voice Command Button */}
+            <Button
+              size="icon"
+              onClick={onVoiceStart}
+              className={`border-slate-700 transition-all duration-300 ${
+                isListening
+                  ? "bg-red-500 hover:bg-red-600 animate-pulse ring-4 ring-red-500/30"
+                  : "bg-slate-900 text-indigo-400 hover:text-white"
+              }`}
+              title="Voice Command"
+            >
+              {isListening ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            </Button>
+
             <Button
               size="icon"
               onClick={onToggleOrbit}
@@ -188,6 +209,13 @@ const ControlPanel = ({
               <Camera className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* Voice Feedback Text (Shows what you said) */}
+          {lastCommand && (
+            <div className="text-xs text-center text-indigo-300 font-mono bg-indigo-900/30 p-1 rounded border border-indigo-500/30">
+              &gt; COMMAND: &quot;{lastCommand}&quot;
+            </div>
+          )}
 
           {/* Solar Time Slider */}
           <div className="pt-4 border-t border-white/10 space-y-3">

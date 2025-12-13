@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Map from "@/components/Maps";
 import ControlPanel from "@/components/ControlPanel";
 import { getWeatherData, getCityAnalysis, getCoordinates } from "@/app/actions";
+import { useVoiceCommand } from "@/hooks/useVoiceCommand";
 
 const INITIAL_CITY = {
   longitude: -74.006,
@@ -89,6 +90,50 @@ export default function Home() {
     }
   };
 
+  // Define Voice Commands - The "Brain" of the voice system
+  // We use useMemo so this object doesn't recreate on every render
+  const commands = useMemo(() => [
+    {
+      keywords: ["analyze", "report", "status", "sector"],
+      action: () => handleAnalyze()
+    },
+    {
+      keywords: ["orbit", "rotate", "spin", "drone", "start"],
+      action: () => setIsOrbiting(true)
+    },
+    {
+      keywords: ["stop", "freeze", "halt"],
+      action: () => setIsOrbiting(false)
+    },
+    {
+      keywords: ["nyc", "new york"],
+      action: () => handleCitySearch("New York")
+    },
+    {
+      keywords: ["london", "uk"],
+      action: () => handleCitySearch("London")
+    },
+    {
+      keywords: ["tokyo", "japan"],
+      action: () => handleCitySearch("Tokyo")
+    },
+    {
+      keywords: ["paris", "france"],
+      action: () => handleCitySearch("Paris")
+    },
+    {
+      keywords: ["dubai"],
+      action: () => handleCitySearch("Dubai")
+    },
+    {
+      keywords: ["singapore"],
+      action: () => handleCitySearch("Singapore")
+    }
+  ], []); // Empty deps - functions are stable
+
+  // Initialize the voice hook
+  const { isListening, lastTranscript, startListening } = useVoiceCommand(commands);
+
   useEffect(() => {
     fetchWeather(INITIAL_CITY.latitude, INITIAL_CITY.longitude);
   }, []);
@@ -107,6 +152,9 @@ export default function Home() {
         onToggleOrbit={() => setIsOrbiting(!isOrbiting)}
         time={time}
         onTimeChange={setTime}
+        onVoiceStart={startListening}
+        isListening={isListening}
+        lastCommand={lastTranscript}
       />
       <Map viewState={viewState} isOrbiting={isOrbiting} time={time} />
     </main>
