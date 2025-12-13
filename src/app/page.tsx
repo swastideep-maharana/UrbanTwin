@@ -1,11 +1,24 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import Map from "@/components/Maps";
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense, memo } from "react";
+import dynamic from "next/dynamic";
 import ControlPanel from "@/components/ControlPanel";
-import WeatherOverlay from "@/components/WeatherOverlay";
 import { getWeatherData, getCityAnalysis, getCoordinates } from "@/app/actions";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
+
+// Dynamic imports for heavy components - improves initial load time
+const Map = dynamic(() => import("@/components/Maps"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-screen bg-slate-950 flex items-center justify-center">
+      <div className="text-cyan-400 text-xl animate-pulse">Initializing Digital Twin...</div>
+    </div>
+  ),
+});
+
+const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay"), {
+  ssr: false,
+});
 
 const INITIAL_CITY = {
   longitude: -74.006,
@@ -25,7 +38,7 @@ type WeatherData = {
   windSpeed: number;
 };
 
-export default function Home() {
+function Home() {
   const [activeCity, setActiveCity] = useState(INITIAL_CITY.name);
   const [viewState, setViewState] = useState<{
     longitude: number;
@@ -44,7 +57,8 @@ export default function Home() {
   const [isOrbiting, setIsOrbiting] = useState(false);
   const [time, setTime] = useState(DEFAULT_TIME);
 
-  const fetchWeather = async (lat: number, lon: number) => {
+  // Memoize fetchWeather to prevent recreation on every render
+  const fetchWeather = useCallback(async (lat: number, lon: number) => {
     setIsLoading(true);
     setAnalysis(null);
     try {
@@ -55,9 +69,10 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const handleCitySearch = async (cityName: string) => {
+  // Memoize handleCitySearch to prevent recreation
+  const handleCitySearch = useCallback(async (cityName: string) => {
     try {
       const coords = await getCoordinates(cityName);
       if (coords) {
@@ -75,9 +90,10 @@ export default function Home() {
     } catch (error) {
       console.error("Search failed:", error);
     }
-  };
+  }, [fetchWeather]);
 
-  const handleAnalyze = async () => {
+  // Memoize handleAnalyze
+  const handleAnalyze = useCallback(async () => {
     if (!weather) return;
     
     setIsAnalyzing(true);
@@ -89,10 +105,14 @@ export default function Home() {
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [activeCity, weather]);
 
-  // Define Voice Commands - The "Brain" of the voice system
-  // We use useMemo so this object doesn't recreate on every render
+  // Memoize toggle orbit handler
+  const handleToggleOrbit = useCallback(() => {
+    setIsOrbiting(prev => !prev);
+  }, []);
+
+  // Define Voice Commands - memoized with proper dependencies
   const commands = useMemo(() => [
     {
       keywords: ["analyze", "report", "status", "sector"],
@@ -130,23 +150,29 @@ export default function Home() {
       keywords: ["singapore"],
       action: () => handleCitySearch("Singapore")
     }
-  ], []); // Empty deps - functions are stable
+  ], [handleAnalyze, handleCitySearch]);
 
   // Initialize the voice hook
   const { isListening, lastTranscript, startListening } = useVoiceCommand(commands);
 
+  // Initial weather fetch
   useEffect(() => {
     fetchWeather(INITIAL_CITY.latitude, INITIAL_CITY.longitude);
-  }, []);
+  }, [fetchWeather]);
+
+  // Only render weather overlay when there's actual weather that needs particles
+  const shouldShowWeatherOverlay = useMemo(() => {
+    return weather && (weather.condition === "Rain" || weather.condition === "Snow" || weather.condition === "Drizzle");
+  }, [weather]);
 
   return (
     <main className="relative min-h-screen w-full">
-      {/* 1. The Map (Background Layer) */}
+      {/* 1. The Map (Background Layer) - Dynamically loaded */}
       <Map viewState={viewState} isOrbiting={isOrbiting} time={time} />
       
-      {/* 2. Weather Overlay (Particle Layer - sits on top of map, under UI) */}
-      {weather && (
-        <WeatherOverlay condition={weather.condition} />
+      {/* 2. Weather Overlay (Particle Layer) - Only render when needed */}
+      {shouldShowWeatherOverlay && (
+        <WeatherOverlay condition={weather!.condition} />
       )}
 
       {/* 3. Control Panel (UI Layer - always on top) */}
@@ -159,7 +185,7 @@ export default function Home() {
         analysis={analysis}
         isAnalyzing={isAnalyzing}
         isOrbiting={isOrbiting}
-        onToggleOrbit={() => setIsOrbiting(!isOrbiting)}
+        onToggleOrbit={handleToggleOrbit}
         time={time}
         onTimeChange={setTime}
         onVoiceStart={startListening}
@@ -169,3 +195,6 @@ export default function Home() {
     </main>
   );
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export default memo(Home);

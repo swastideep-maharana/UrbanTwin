@@ -2,6 +2,11 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// In-memory cache for performance
+const weatherCache = new Map<string, { data: any; timestamp: number }>();
+const geocodeCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 const MOCK_WEATHER_DATA = {
   NYC: { temp: 18, condition: "Clear", description: "clear sky", humidity: 65, windSpeed: 3.5 },
   London: { temp: 12, condition: "Clouds", description: "scattered clouds", humidity: 78, windSpeed: 4.2 },
@@ -35,6 +40,14 @@ function getMockAnalysis(city: string, weather: { condition: string }): string {
 }
 
 export async function getWeatherData(lat: number, lon: number) {
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  
+  // Check cache first
+  const cached = weatherCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+
   const API_KEY = process.env.WEATHER_API_KEY;
 
   if (!API_KEY) {
@@ -45,7 +58,10 @@ export async function getWeatherData(lat: number, lon: number) {
   try {
     const response = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`,
-      { cache: "no-store" }
+      { 
+        cache: "no-store",
+        next: { revalidate: 300 } // Revalidate every 5 minutes
+      }
     );
 
     if (!response.ok) {
@@ -57,13 +73,18 @@ export async function getWeatherData(lat: number, lon: number) {
 
     const data = await response.json();
 
-    return {
+    const weatherData = {
       temp: Math.round(data.main.temp),
       condition: data.weather[0].main,
       description: data.weather[0].description,
       humidity: data.main.humidity,
       windSpeed: data.wind.speed,
     };
+
+    // Cache the result
+    weatherCache.set(cacheKey, { data: weatherData, timestamp: Date.now() });
+
+    return weatherData;
   } catch (error) {
     console.error("Weather fetch failed:", error);
     console.warn("Falling back to mock weather data");
@@ -122,6 +143,14 @@ Do not use markdown formatting. Be direct and authoritative.`;
 }
 
 export async function getCoordinates(cityName: string) {
+  const cacheKey = cityName.toLowerCase();
+  
+  // Check cache first
+  const cached = geocodeCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+
   const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   
   if (!MAPBOX_TOKEN) {
@@ -131,17 +160,25 @@ export async function getCoordinates(cityName: string) {
   try {
     const response = await fetch(
       `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(cityName)}.json?access_token=${MAPBOX_TOKEN}&limit=1`,
-      { cache: "force-cache" }
+      { 
+        cache: "force-cache",
+        next: { revalidate: 86400 } // Cache for 24 hours
+      }
     );
     const data = await response.json();
 
     if (data.features && data.features.length > 0) {
       const [lng, lat] = data.features[0].center;
-      return {
+      const result = {
         longitude: lng,
         latitude: lat,
         name: data.features[0].text,
       };
+
+      // Cache the result
+      geocodeCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+      return result;
     }
     
     return null;

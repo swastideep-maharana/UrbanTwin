@@ -1,20 +1,24 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, memo } from "react";
 
 interface WeatherOverlayProps {
-  condition: string; // "Rain", "Snow", "Clear", "Clouds", "Drizzle", etc.
+  condition: string;
 }
 
 const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number | undefined>(undefined);
+  const particlesRef = useRef<{ x: number; y: number; speed: number; size: number; opacity: number; drift: number }[]>([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { 
+      alpha: true,
+      desynchronized: true, // Better performance
+    });
     if (!ctx) return;
 
     // Resize canvas to full screen
@@ -25,9 +29,6 @@ const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
     window.addEventListener("resize", resize);
     resize();
 
-    // Particle Configuration - Enhanced for better visuals
-    let particles: { x: number; y: number; speed: number; size: number; opacity: number; drift: number }[] = [];
-    
     // Determine particle count based on weather condition
     let particleCount = 0;
     if (condition === "Rain") particleCount = 800;
@@ -35,30 +36,48 @@ const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
     else if (condition === "Snow") particleCount = 250;
 
     // Initialize Particles with enhanced properties
+    particlesRef.current = [];
     for (let i = 0; i < particleCount; i++) {
-      particles.push({
+      particlesRef.current.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         speed: condition === "Snow" 
-          ? Math.random() * 1.5 + 0.5  // Slower for snow
-          : Math.random() * 6 + 3,      // Faster for rain
+          ? Math.random() * 1.5 + 0.5
+          : Math.random() * 6 + 3,
         size: condition === "Snow"
-          ? Math.random() * 3 + 1       // Larger for snow
-          : Math.random() * 1.5 + 0.5,  // Smaller for rain
-        opacity: Math.random() * 0.5 + 0.3, // Varied opacity for depth
-        drift: Math.random() * 2 - 1,   // Random drift direction
+          ? Math.random() * 3 + 1
+          : Math.random() * 1.5 + 0.5,
+        opacity: Math.random() * 0.5 + 0.3,
+        drift: Math.random() * 2 - 1,
       });
     }
 
-    const animate = () => {
+    let lastTime = performance.now();
+    const targetFPS = 60;
+    const frameTime = 1000 / targetFPS;
+
+    const animate = (currentTime: number) => {
       if (!ctx || !canvas) return;
+
+      const deltaTime = currentTime - lastTime;
+      
+      // Frame rate limiting for better performance
+      if (deltaTime < frameTime) {
+        requestRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      lastTime = currentTime - (deltaTime % frameTime);
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // No weather? Stop rendering.
       if (condition !== "Rain" && condition !== "Snow" && condition !== "Drizzle") return;
 
-      particles.forEach((p) => {
-        ctx.save();
+      const particles = particlesRef.current;
+
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
         
         if (condition === "Rain" || condition === "Drizzle") {
           // Enhanced Rain rendering with gradient for realism
@@ -85,9 +104,10 @@ const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
           ctx.fill();
+          
+          // Reset shadow
+          ctx.shadowBlur = 0;
         }
-        
-        ctx.restore();
 
         // Move Particle
         p.y += p.speed;
@@ -112,27 +132,30 @@ const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
           p.x = Math.random() * canvas.width;
           p.y = -10;
         }
-      });
+      }
 
       requestRef.current = requestAnimationFrame(animate);
     };
 
-    animate();
+    requestRef.current = requestAnimationFrame(animate);
 
     return () => {
       window.removeEventListener("resize", resize);
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [condition]); // Re-run if weather changes
+  }, [condition]);
 
   // Pass click events through to the map (pointer-events-none)
   return (
     <canvas
       ref={canvasRef}
       className="absolute top-0 left-0 w-full h-full pointer-events-none z-20"
-      style={{ mixBlendMode: 'screen' }} // Blend mode for better integration
+      style={{ mixBlendMode: 'screen' }}
     />
   );
 };
 
-export default WeatherOverlay;
+// Memoize to prevent unnecessary re-renders
+export default memo(WeatherOverlay, (prevProps, nextProps) => {
+  return prevProps.condition === nextProps.condition;
+});
