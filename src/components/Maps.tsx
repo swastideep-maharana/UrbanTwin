@@ -98,6 +98,43 @@ const Map = ({ viewState, isOrbiting }: MapProps) => { // Receive props here
             }
           });
         }
+
+        // 1. Add the Elevation Source (The data for mountains)
+        if (!mapRef.current.getSource('mapbox-dem')) {
+          mapRef.current.addSource('mapbox-dem', {
+            'type': 'raster-dem',
+            'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            'tileSize': 512,
+            'maxzoom': 14
+          });
+        }
+
+        // 2. Turn on the Terrain (The visual 3D mountains)
+        mapRef.current.setTerrain({ 
+            'source': 'mapbox-dem', 
+            'exaggeration': 1.5 // Make mountains look 1.5x taller for dramatic effect
+        });
+
+        // 3. Add a Realistic Sky Layer (Atmosphere & Stars)
+        if (!mapRef.current.getLayer('sky')) {
+          mapRef.current.addLayer({
+            'id': 'sky',
+            'type': 'sky',
+            'paint': {
+              'sky-type': 'atmosphere',
+              'sky-atmosphere-sun': [0.0, 0.0], // Sun position
+              'sky-atmosphere-sun-intensity': 15,
+              // Make it look like a cool sci-fi night
+              'sky-atmosphere-color': '#0b0e1f', 
+              'sky-opacity': [
+                  'interpolate', ['linear'], ['zoom'],
+                  0, 1,
+                  5, 1,
+                  22, 0 // Fade out sky when zoomed in super close to buildings
+              ]
+            }
+          });
+        }
       });
     }
     return () => { mapRef.current?.remove(); };
