@@ -2,9 +2,24 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+interface WeatherData {
+  temp: number;
+  condition: string;
+  description: string;
+  humidity: number;
+  windSpeed: number;
+}
+
+interface GeocodeData {
+  longitude: number;
+  latitude: number;
+  name: string;
+  place_type?: string[];
+}
+
 // In-memory cache for performance
-const weatherCache = new Map<string, { data: any; timestamp: number }>();
-const geocodeCache = new Map<string, { data: any; timestamp: number }>();
+const weatherCache = new Map<string, { data: WeatherData; timestamp: number }>();
+const geocodeCache = new Map<string, { data: GeocodeData; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 const MOCK_WEATHER_DATA = {
@@ -118,23 +133,25 @@ Do not use markdown formatting. Be direct and authoritative.`;
     const result = await model.generateContent(prompt);
     const response = await result.response;
     return response.text();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("AI Analysis failed:", error);
 
-    if (error.status === 429 && error.message?.includes("quota")) {
+    const err = error as { status?: number; message?: string };
+
+    if (err.status === 429 && err.message?.includes("quota")) {
       console.warn("⚠️ Gemini API quota exhausted. Using mock analysis.");
-      return `🤖 [Demo Mode] ${getMockAnalysis(city, weather)}`;
+      return `${getMockAnalysis(city, weather)}`;
     }
 
-    if (error.status === 429) {
+    if (err.status === 429) {
       return "⏳ Rate limit reached. Please wait 60 seconds before requesting another analysis.";
     }
 
-    if (error.status === 401 || error.status === 403) {
+    if (err.status === 401 || err.status === 403) {
       return "🔑 API authentication failed. Please check your GEMINI_API_KEY.";
     }
 
-    if (error.message?.includes("API key")) {
+    if (err.message?.includes("API key")) {
       return "🔑 Invalid API key. Please regenerate your Gemini API key.";
     }
 
@@ -173,6 +190,7 @@ export async function getCoordinates(cityName: string) {
         longitude: lng,
         latitude: lat,
         name: data.features[0].text,
+        place_type: data.features[0].place_type,
       };
 
       // Cache the result

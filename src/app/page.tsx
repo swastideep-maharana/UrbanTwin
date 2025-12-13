@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, lazy, Suspense, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import dynamic from "next/dynamic";
 import ControlPanel from "@/components/ControlPanel";
 import { getWeatherData, getCityAnalysis, getCoordinates } from "@/app/actions";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
+import { usePerformance } from "@/hooks/usePerformance";
 
 // Dynamic imports for heavy components - improves initial load time
 const Map = dynamic(() => import("@/components/Maps"), {
@@ -56,6 +57,10 @@ function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isOrbiting, setIsOrbiting] = useState(false);
   const [time, setTime] = useState(DEFAULT_TIME);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [showModels, setShowModels] = useState(true);
+  
+  const performanceLevel = usePerformance();
 
   // Memoize fetchWeather to prevent recreation on every render
   const fetchWeather = useCallback(async (lat: number, lon: number) => {
@@ -74,13 +79,29 @@ function Home() {
   // Memoize handleCitySearch to prevent recreation
   const handleCitySearch = useCallback(async (cityName: string) => {
     try {
+      // We expect coords to have place_type now
       const coords = await getCoordinates(cityName);
       if (coords) {
         setActiveCity(coords.name);
+        
+        // Smart Zoom: Determine zoom level based on place type
+        let newZoom = DEFAULT_ZOOM;
+        
+        const isLandmark = coords.place_type && (
+          coords.place_type.includes('poi') || 
+          coords.place_type.includes('landmark') || 
+          coords.place_type.includes('address')
+        );
+
+        if (isLandmark) {
+          newZoom = 17.5; // Close-up for buildings
+          setShowModels(true); // Auto-enable 3D models for landmarks
+        }
+
         setViewState({
           longitude: coords.longitude,
           latitude: coords.latitude,
-          zoom: DEFAULT_ZOOM,
+          zoom: newZoom,
         });
         await fetchWeather(coords.latitude, coords.longitude);
         setIsOrbiting(false);
@@ -127,6 +148,22 @@ function Home() {
       action: () => setIsOrbiting(false)
     },
     {
+      keywords: ["light mode", "day mode", "sun"],
+      action: () => setTheme('light')
+    },
+    {
+      keywords: ["dark mode", "night mode", "moon"],
+      action: () => setTheme('dark')
+    },
+    {
+      keywords: ["models on", "buildings on", "3d on"],
+      action: () => setShowModels(true)
+    },
+    {
+      keywords: ["models off", "buildings off", "3d off"],
+      action: () => setShowModels(false)
+    },
+    {
       keywords: ["nyc", "new york"],
       action: () => handleCitySearch("New York")
     },
@@ -168,11 +205,23 @@ function Home() {
   return (
     <main className="relative min-h-screen w-full">
       {/* 1. The Map (Background Layer) - Dynamically loaded */}
-      <Map viewState={viewState} isOrbiting={isOrbiting} time={time} />
+      <Map 
+        key={theme}
+        viewState={viewState} 
+        isOrbiting={isOrbiting} 
+        time={time} 
+        performanceLevel={performanceLevel}
+        theme={theme}
+        showModels={showModels}
+      />
       
       {/* 2. Weather Overlay (Particle Layer) - Only render when needed */}
       {shouldShowWeatherOverlay && (
-        <WeatherOverlay condition={weather!.condition} />
+        <WeatherOverlay 
+          condition={weather!.condition} 
+          performanceLevel={performanceLevel}
+          theme={theme}
+        />
       )}
 
       {/* 3. Control Panel (UI Layer - always on top) */}
@@ -191,6 +240,10 @@ function Home() {
         onVoiceStart={startListening}
         isListening={isListening}
         lastCommand={lastTranscript}
+        theme={theme}
+        onToggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+        showModels={showModels}
+        onToggleModels={() => setShowModels(prev => !prev)}
       />
     </main>
   );

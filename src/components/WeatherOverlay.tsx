@@ -1,27 +1,79 @@
 "use client";
 
 import React, { useEffect, useRef, memo } from "react";
+import { PerformanceLevel } from "@/hooks/usePerformance";
 
 interface WeatherOverlayProps {
   condition: string;
+  performanceLevel?: PerformanceLevel;
+  theme?: 'dark' | 'light';
 }
 
-const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
+const WeatherOverlay = ({ condition, performanceLevel = 'medium', theme = 'dark' }: WeatherOverlayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number | undefined>(undefined);
+  // Use a Float32Array for better memory locality if we had massive counts, 
+  // but object arrays are easier to manage for complex props here. 
+  // We'll stick to objects but keep them recycled.
   const particlesRef = useRef<{ x: number; y: number; speed: number; size: number; opacity: number; drift: number }[]>([]);
+  
+  // Offscreen canvas for sprites to avoid re-drawing gradients/shadows every frame
+  const spriteRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
+    // Determine particle count based on weather condition & performance
+    let baseCount = 0;
+    if (condition === "Rain") baseCount = 1000;
+    else if (condition === "Drizzle") baseCount = 500;
+    else if (condition === "Snow") baseCount = 300;
+
+    // Adjust for performance
+    const multiplier = performanceLevel === 'high' ? 1 : performanceLevel === 'medium' ? 0.6 : 0.2;
+    const particleCount = Math.floor(baseCount * multiplier);
+
+    if (particleCount === 0) {
+        particlesRef.current = [];
+        return; 
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Prepare sprite
+    const prepareSprite = () => {
+      if (!spriteRef.current) {
+        spriteRef.current = document.createElement('canvas');
+      }
+      const spriteCtx = spriteRef.current.getContext('2d', { alpha: true });
+      if (!spriteCtx) return;
+
+      if (condition === "Snow") {
+        const size = 8; // standardized size for sprite
+        spriteRef.current.width = size * 2;
+        spriteRef.current.height = size * 2;
+        
+        const center = size;
+        const radius = size / 2;
+
+        // In light mode, make snow slightly grey/blue so it's visible, otherwise white
+        spriteCtx.fillStyle = theme === 'light' ? "#cbd5e1" : "#FFF";
+        spriteCtx.shadowBlur = 4;
+        spriteCtx.shadowColor = theme === 'light' ? "rgba(148, 163, 184, 0.8)" : "rgba(255, 255, 255, 0.8)";
+        spriteCtx.beginPath();
+        spriteCtx.arc(center, center, radius, 0, Math.PI * 2);
+        spriteCtx.fill();
+      }
+      // For rain, we draw lines dynamically because length varies by speed, 
+      // but we can optimize the stroke style.
+    };
+    prepareSprite();
+
     const ctx = canvas.getContext("2d", { 
       alpha: true,
-      desynchronized: true, // Better performance
+      desynchronized: performanceLevel === 'high', 
     });
     if (!ctx) return;
 
-    // Resize canvas to full screen
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -29,13 +81,7 @@ const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
     window.addEventListener("resize", resize);
     resize();
 
-    // Determine particle count based on weather condition
-    let particleCount = 0;
-    if (condition === "Rain") particleCount = 800;
-    else if (condition === "Drizzle") particleCount = 400;
-    else if (condition === "Snow") particleCount = 250;
-
-    // Initialize Particles with enhanced properties
+    // Initialize Particles
     particlesRef.current = [];
     for (let i = 0; i < particleCount; i++) {
       particlesRef.current.push({
@@ -43,96 +89,88 @@ const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
         y: Math.random() * canvas.height,
         speed: condition === "Snow" 
           ? Math.random() * 1.5 + 0.5
-          : Math.random() * 6 + 3,
+          : Math.random() * 15 + 10, // Rain falls faster
         size: condition === "Snow"
-          ? Math.random() * 3 + 1
-          : Math.random() * 1.5 + 0.5,
+          ? Math.random() * 3 + 2
+          : Math.random() * 2 + 0.5,
         opacity: Math.random() * 0.5 + 0.3,
         drift: Math.random() * 2 - 1,
       });
     }
 
     let lastTime = performance.now();
-    const targetFPS = 60;
+    const targetFPS = performanceLevel === 'low' ? 30 : 60;
     const frameTime = 1000 / targetFPS;
 
     const animate = (currentTime: number) => {
       if (!ctx || !canvas) return;
 
       const deltaTime = currentTime - lastTime;
-      
-      // Frame rate limiting for better performance
       if (deltaTime < frameTime) {
         requestRef.current = requestAnimationFrame(animate);
         return;
       }
-
+      
       lastTime = currentTime - (deltaTime % frameTime);
-
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // No weather? Stop rendering.
-      if (condition !== "Rain" && condition !== "Snow" && condition !== "Drizzle") return;
-
+      const width = canvas.width;
+      const height = canvas.height;
       const particles = particlesRef.current;
+      const len = particles.length;
 
-      for (let i = 0; i < particles.length; i++) {
+      // Batch drawing settings
+      if (condition === "Rain" || condition === "Drizzle") {
+        // Darker rain for light mode, lighter for dark mode
+        ctx.strokeStyle = theme === 'light' ? "rgba(71, 85, 105, 0.6)" : "rgba(174, 194, 224, 0.6)";
+        ctx.lineCap = "round";
+      }
+
+      for (let i = 0; i < len; i++) {
         const p = particles[i];
-        
+
         if (condition === "Rain" || condition === "Drizzle") {
-          // Enhanced Rain rendering with gradient for realism
-          const gradient = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.speed * 5);
-          gradient.addColorStop(0, `rgba(174, 194, 224, ${p.opacity * 0.8})`);
-          gradient.addColorStop(1, `rgba(174, 194, 224, 0)`);
-          
-          ctx.strokeStyle = gradient;
-          ctx.lineWidth = condition === "Drizzle" ? 0.5 : 1;
-          ctx.lineCap = "round";
-          
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x, p.y + p.speed * (condition === "Drizzle" ? 3 : 5));
-          ctx.stroke();
+           // Optimized Rain: Single path (or small batches if we wanted, but individual is fine without gradients)
+           // Variable opacity per drop is nice but costly to switch context state.
+           // We'll use global alpha trick or just fixed color for speed.
+           // For best speed: set style once, draw all. But we want var opacity.
+           // Compromise: Pre-calculate alpha groups? No, just simple draw.
+           
+           ctx.beginPath();
+           ctx.lineWidth = p.size;
+           ctx.moveTo(p.x, p.y);
+           ctx.lineTo(p.x, p.y + p.speed * 2);
+           ctx.stroke();
+           
         } else if (condition === "Snow") {
-          // Enhanced Snow rendering with glow effect
-          ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
-          
-          // Add subtle glow
-          ctx.shadowBlur = 3;
-          ctx.shadowColor = "rgba(255, 255, 255, 0.5)";
-          
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Reset shadow
-          ctx.shadowBlur = 0;
+          // Draw Cached Sprite
+          if (spriteRef.current) {
+             ctx.globalAlpha = p.opacity;
+             // Draw centered
+             ctx.drawImage(spriteRef.current, p.x, p.y, p.size, p.size);
+          }
         }
 
-        // Move Particle
+        // Update Physics
         p.y += p.speed;
         
-        // Enhanced wind effect for snow - more natural drift
         if (condition === "Snow") {
-          p.x += Math.sin(p.y / 50 + p.drift) * 0.8;
+          p.x += Math.sin(p.y / 50 + p.drift) * 0.5;
         } else {
-          // Slight wind for rain too
-          p.x += p.drift * 0.3;
+          p.x += p.drift * 0.2;
         }
 
-        // Reset if off screen (with some margin)
-        if (p.y > canvas.height + 10) {
-          p.y = -10;
-          p.x = Math.random() * canvas.width;
-          p.opacity = Math.random() * 0.5 + 0.3;
+        // Reset
+        if (p.y > height) {
+          p.y = -20;
+          p.x = Math.random() * width;
         }
-        
-        // Reset if drifted too far horizontally
-        if (p.x < -10 || p.x > canvas.width + 10) {
-          p.x = Math.random() * canvas.width;
-          p.y = -10;
-        }
+        if (p.x > width) p.x = 0;
+        else if (p.x < 0) p.x = width;
       }
+      
+      // Reset global alpha
+      ctx.globalAlpha = 1.0;
 
       requestRef.current = requestAnimationFrame(animate);
     };
@@ -143,9 +181,8 @@ const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
       window.removeEventListener("resize", resize);
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [condition]);
+  }, [condition, performanceLevel, theme]);
 
-  // Pass click events through to the map (pointer-events-none)
   return (
     <canvas
       ref={canvasRef}
@@ -155,7 +192,4 @@ const WeatherOverlay = ({ condition }: WeatherOverlayProps) => {
   );
 };
 
-// Memoize to prevent unnecessary re-renders
-export default memo(WeatherOverlay, (prevProps, nextProps) => {
-  return prevProps.condition === nextProps.condition;
-});
+export default memo(WeatherOverlay);

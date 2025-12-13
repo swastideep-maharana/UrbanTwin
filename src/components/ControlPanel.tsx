@@ -1,11 +1,14 @@
 "use client";
 
+// ControlPanel: Handles user input and displays weather/analysis data
+
 import React, { useState, useCallback, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, Search, MapPin, Camera, Sun, Moon, Mic, MicOff } from "lucide-react";
+import { Loader2, Sparkles, Search, MapPin, Camera, Sun, Moon, Mic, MicOff, Wind, Droplets, Thermometer, Radio } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const COOLDOWN_DURATION = 10;
 const WEATHER_ICONS: Record<string, string> = {
@@ -13,9 +16,13 @@ const WEATHER_ICONS: Record<string, string> = {
   Clouds: "☁️",
   Rain: "🌧️",
   Snow: "❄️",
+  Drizzle: "🌦️",
+  Thunderstorm: "⛈️",
 };
 
-const CARD_STYLES = "bg-slate-900/60 border-white/10 backdrop-blur-xl text-slate-100 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)]";
+// Enhanced Glassmorphism Style
+const GLASS_PANEL = "bg-slate-950/70 border-white/10 backdrop-blur-2xl text-slate-100 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] ring-1 ring-white/5";
+const INPUT_STYLE = "bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/50 focus-visible:border-cyan-500 transition-all duration-300";
 
 interface WeatherData {
   temp: number;
@@ -41,6 +48,10 @@ interface ControlPanelProps {
   onVoiceStart: () => void;
   isListening: boolean;
   lastCommand: string;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
+  showModels: boolean;
+  onToggleModels: () => void;
 }
 
 // Helper to format time (e.g. 14.5 -> "14:30")
@@ -59,38 +70,31 @@ const getTimePeriod = (time: number) => {
 };
 
 // Memoized sub-components
-const WeatherDisplay = memo(({ weather }: { weather: WeatherData }) => (
-  <>
-    <div className="flex items-center justify-between border-b border-slate-700 pb-4">
-      <div>
-        <div className="text-4xl font-bold">{weather.temp}°C</div>
-        <div className="text-slate-400 capitalize">{weather.description}</div>
-      </div>
-      <div className="text-4xl animate-bounce-slow">{WEATHER_ICONS[weather.condition] || "🌡️"}</div>
+const WeatherMetric = ({ icon: Icon, label, value, unit }: { icon: React.ElementType, label: string, value: string | number, unit?: string }) => (
+  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-900/40 border border-white/5 transition-all hover:bg-slate-800/50 hover:scale-105 group cursor-default">
+    <div className="text-slate-400 group-hover:text-cyan-400 transition-colors mb-1">
+      <Icon className="h-4 w-4" />
     </div>
-
-    <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-700">
-      <div className="transition-all hover:scale-105">
-        <div className="text-xs text-slate-400">HUMIDITY</div>
-        <div className="font-mono text-lg">{weather.humidity}%</div>
-      </div>
-      <div className="transition-all hover:scale-105">
-        <div className="text-xs text-slate-400">WIND SPEED</div>
-        <div className="font-mono text-lg">{weather.windSpeed} m/s</div>
-      </div>
+    <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-0.5">{label}</div>
+    <div className="font-mono text-sm font-medium text-slate-200">
+      {value}<span className="text-slate-500 text-xs ml-0.5">{unit}</span>
     </div>
-  </>
-));
-
-WeatherDisplay.displayName = 'WeatherDisplay';
+  </div>
+);
 
 const AnalysisResult = memo(({ analysis }: { analysis: string }) => (
-  <div className="bg-slate-800 p-3 rounded-md border border-slate-600 animate-in fade-in slide-in-from-bottom-2">
-    <div className="flex items-center gap-2 mb-2 text-xs text-indigo-400 font-bold uppercase">
-      <Sparkles className="h-3 w-3" />
-      Gemini Insight
+  <div className="bg-gradient-to-br from-slate-900/90 to-slate-900/50 p-4 rounded-lg border border-indigo-500/20 animate-in fade-in slide-in-from-bottom-2 shadow-inner shadow-black/20">
+    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/5">
+      <div className="bg-indigo-500/20 p-1.5 rounded-md text-indigo-400">
+        <Sparkles className="h-3.5 w-3.5" />
+      </div>
+      <span className="text-xs font-bold text-indigo-300 uppercase tracking-widest">
+        AI Sector Analysis
+      </span>
     </div>
-    <p className="text-sm text-slate-300 leading-relaxed">{analysis}</p>
+    <p className="text-sm text-slate-300 leading-relaxed font-light tracking-wide text-justify">
+      {analysis}
+    </p>
   </div>
 ));
 
@@ -111,6 +115,10 @@ const ControlPanel = ({
   onVoiceStart,
   isListening,
   lastCommand,
+  theme,
+  onToggleTheme,
+  showModels,
+  onToggleModels,
 }: ControlPanelProps) => {
   const [searchInput, setSearchInput] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -147,31 +155,57 @@ const ControlPanel = ({
   }, [cooldown, onAnalyze]);
 
   return (
-    <div className="absolute top-4 left-4 z-10 w-80 space-y-4">
-      {/* Search & Location Card */}
-      <Card className={CARD_STYLES}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-bold flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-cyan-400" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
-              UrbanTwin
+    <div className="absolute top-4 left-4 z-10 w-[22rem] flex flex-col gap-4 max-h-[calc(100vh-2rem)] overflow-y-auto pr-2 scrollbar-none">
+      {/* Header & Search Card */}
+      <Card className={cn(GLASS_PANEL, "overflow-hidden")}>
+        <CardHeader className="pb-3 pt-4 px-4 bg-gradient-to-r from-slate-900/50 to-transparent">
+          <CardTitle className="text-xl font-black tracking-tighter flex items-center gap-2.5">
+            <div className="bg-cyan-500/10 p-1.5 rounded-lg border border-cyan-500/20">
+              <MapPin className="h-5 w-5 text-cyan-400" />
+            </div>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-cyan-400 filter drop-shadow-sm">
+              URBANTWIN
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        
+        <CardContent className="space-y-4 px-4 pb-4">
+          {/* Active Sector Display */}
+          <div className="flex items-center justify-between text-sm bg-slate-950/40 p-2.5 rounded-lg border border-white/5 group transition-colors hover:border-white/10">
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Active Sector</span>
+              <span className="font-bold text-slate-100 tracking-wide truncate max-w-[140px] group-hover:text-cyan-200 transition-colors">
+                {selectedCityName}
+              </span>
+            </div>
+            <div className="h-full w-[1px] bg-white/10 mx-2" />
+             <div className="flex items-center gap-2">
+                {isLoading ? (
+                  <Loader2 className="h-3 w-3 text-yellow-500 animate-spin" />
+                ) : (
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                )}
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {isLoading ? 'SYNCING DATA...' : 'SYSTEM ONLINE'}
+                </span>
+             </div>
+          </div>
+
           <div className="flex gap-2">
-            <form onSubmit={handleSearchSubmit} className="flex gap-2 flex-1">
+            <form onSubmit={handleSearchSubmit} className="flex gap-2 flex-1 relative">
               <Input
-                placeholder="Search city..."
+                placeholder="Locate sector..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
+                className={cn(INPUT_STYLE, "pl-9 pr-2")}
               />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
               <Button
                 type="submit"
                 size="icon"
                 disabled={isSearching}
-                className="bg-indigo-600 hover:bg-indigo-700"
+                title="Search City"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 border border-indigo-500/30 transition-all hover:scale-105 active:scale-95 w-10 shrink-0"
               >
                 {isSearching ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -181,110 +215,198 @@ const ControlPanel = ({
               </Button>
             </form>
 
-            {/* Voice Command Button */}
-            <Button
-              size="icon"
-              onClick={onVoiceStart}
-              className={`border-slate-700 transition-all duration-300 ${
-                isListening
-                  ? "bg-red-500 hover:bg-red-600 animate-pulse ring-4 ring-red-500/30"
-                  : "bg-slate-900 text-indigo-400 hover:text-white"
-              }`}
-              title="Voice Command"
-            >
-              {isListening ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-            </Button>
-
-            <Button
-              size="icon"
-              onClick={onToggleOrbit}
-              variant={isOrbiting ? "default" : "outline"}
-              className={`border-slate-700 ${
-                isOrbiting
-                  ? "bg-amber-500 hover:bg-amber-600 text-white animate-pulse"
-                  : "bg-slate-900 text-slate-400 hover:text-white"
-              }`}
-              title="Toggle Drone Orbit"
-            >
-              <Camera className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Voice Feedback Text (Shows what you said) */}
-          {lastCommand && (
-            <div className="text-xs text-center text-indigo-300 font-mono bg-indigo-900/30 p-1 rounded border border-indigo-500/30">
-              &gt; COMMAND: &quot;{lastCommand}&quot;
-            </div>
-          )}
-
-          {/* Solar Time Slider */}
-          <div className="pt-4 border-t border-white/10 space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
-              <span className={`flex items-center gap-1 ${timePeriod.color}`}>
-                <TimePeriodIcon className="h-3 w-3" />
-                {timePeriod.label}
-              </span>
-              <span className="text-slate-300">{formatTime(time)}</span>
-            </div>
-            <Slider
-              value={[time]}
-              max={24}
-              step={0.1}
-              onValueChange={(vals: number[]) => onTimeChange(vals[0])}
-              className="cursor-pointer"
-            />
-            <div className="flex justify-between text-[10px] text-slate-500">
-              <span>00:00</span>
-              <span>06:00</span>
-              <span>12:00</span>
-              <span>18:00</span>
-              <span>24:00</span>
+            <div className="flex gap-1 shrink-0">
+               {/* Voice Control */}
+              <Button
+                size="icon"
+                onClick={onVoiceStart}
+                className={cn(
+                  "border transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg",
+                  isListening
+                    ? "bg-rose-500 hover:bg-rose-600 border-rose-400 text-white animate-pulse shadow-rose-500/20"
+                    : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-400 hover:text-indigo-300"
+                )}
+                title="Voice Command (Try 'Orbit', 'Analyze')"
+              >
+                {isListening ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+              </Button>
+              
+               {/* Orbit Control */}
+              <Button
+                size="icon"
+                onClick={onToggleOrbit}
+                className={cn(
+                   "border transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg",
+                   isOrbiting
+                    ? "bg-amber-500 hover:bg-amber-600 border-amber-400 text-white shadow-amber-500/20"
+                    : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-400 hover:text-amber-300"
+                )}
+                title={isOrbiting ? "Stop Orbit" : "Start Drone Orbit"}
+              >
+                <Camera className={`h-4 w-4 ${isOrbiting ? 'animate-spin-slow' : ''}`} />
+              </Button>
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-sm text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-800">
-            <span>Active Sector:</span>
-            <span className="font-bold text-white tracking-wide">
-              {selectedCityName}
+           {/* View Modes (Theme & Models) */}
+           <div className="grid grid-cols-2 gap-2 pb-2">
+             <Button
+                variant="outline"
+                size="sm"
+                onClick={onToggleTheme}
+                title="Toggle Day/Night Theme"
+                className={cn(
+                  "text-[10px] font-bold uppercase tracking-wider h-7 border-slate-700 hover:bg-slate-800",
+                  theme === 'light' ? "bg-slate-100 text-slate-900 hover:bg-white" : "bg-slate-900 text-slate-400"
+                )}
+              >
+                {theme === 'light' ? (
+                  <><Sun className="mr-1.5 h-3 w-3 text-orange-400" /> DAY MODE</>
+                ) : (
+                  <><Moon className="mr-1.5 h-3 w-3 text-indigo-400" /> NIGHT MODE</>
+                )}
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onToggleModels}
+                title="Toggle 3D Buildings Layer"
+                className={cn(
+                  "text-[10px] font-bold uppercase tracking-wider h-7 border-slate-700",
+                  showModels 
+                    ? "bg-emerald-900/30 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/50" 
+                    : "bg-slate-900 text-slate-500 hover:text-slate-300 hover:bg-slate-800"
+                )}
+              >
+                <div className={cn("mr-1.5 h-1.5 w-1.5 rounded-sm", showModels ? "bg-emerald-400 shadow-[0_0_4px_cyan]" : "bg-slate-500")} />
+                {showModels ? "3D MODELS ON" : "3D MODELS OFF"}
+              </Button>
+           </div>
+           
+          {/* Voice Terminal Feedback */}
+          <div className={cn(
+            "text-xs font-mono bg-black/40 p-2.5 rounded-md border border-white/5 transition-all duration-300 min-h-[2.5rem] flex items-center",
+            lastCommand ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 h-0 p-0 border-0 overflow-hidden"
+          )}>
+            <Radio className="h-3 w-3 text-indigo-400 mr-2 animate-pulse" />
+            <span className="text-indigo-200">
+              <span className="text-indigo-500 mr-1">&gt;</span> 
+              &quot;{lastCommand}&quot;
             </span>
+          </div>
+
+          {/* Time Control */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-900/50 border border-white/5">
+                <TimePeriodIcon className={cn("h-3.5 w-3.5", timePeriod.color)} />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">{timePeriod.label}</span>
+              </div>
+              <span className="text-xs font-mono font-medium text-slate-400">{formatTime(time)}</span>
+            </div>
+            
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500/10 to-indigo-500/10 rounded-lg blur opacity-0 group-hover:opacity-100 transition duration-500" />
+              <Slider
+                value={[time]}
+                max={24}
+                step={0.1}
+                onValueChange={(vals: number[]) => onTimeChange(vals[0])}
+                className="cursor-pointer relative z-10"
+              />
+            </div>
+            
+            <div className="flex justify-between px-1">
+              {[0, 6, 12, 18, 24].map((t) => (
+                <div key={t} className="flex flex-col items-center gap-1">
+                  <div className="h-1 w-0.5 bg-slate-700 rounded-full" />
+                  <span className="text-[9px] text-slate-600 font-mono">{t.toString().padStart(2, '0')}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Live Data & AI Section */}
-      <Card className={CARD_STYLES}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm uppercase tracking-wider text-slate-400">
-            Live Conditions
+      {/* Live Data & AI Panel */}
+      <Card className={cn(GLASS_PANEL, "transition-all duration-300")}>
+        <CardHeader className="pb-2 px-4 pt-4 border-b border-white/5">
+          <CardTitle className="text-xs font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse" />
+            Environmental Data
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 space-y-4">
           {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Aligning satellites...
+            <div className="flex flex-col items-center justify-center py-8 space-y-3 text-slate-500">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              <span className="text-xs tracking-wider animate-pulse">ACQUIRING SATELLITE FEED...</span>
             </div>
           ) : weather ? (
             <>
-              <WeatherDisplay weather={weather} />
+              {/* Main Weather Hero */}
+              <div className="flex items-center justify-between mb-4">
+                 <div className="flex flex-col">
+                    <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 tracking-tighter">
+                      {Math.round(weather.temp)}°
+                    </span>
+                    <span className="text-sm text-cyan-400 font-medium capitalize flex items-center gap-1">
+                      {weather.description}
+                    </span>
+                 </div>
+                 <div className="text-5xl filter drop-shadow-lg animate-bounce-slow">
+                    {WEATHER_ICONS[weather.condition] || "🌡️"}
+                 </div>
+              </div>
 
+              {/* Metrics Grid */}
+              <div className="grid grid-cols-3 gap-2">
+                <WeatherMetric 
+                  icon={Droplets} 
+                  label="Humidity" 
+                  value={weather.humidity} 
+                  unit="%" 
+                />
+                <WeatherMetric 
+                  icon={Wind} 
+                  label="Wind" 
+                  value={weather.windSpeed} 
+                  unit="m/s" 
+                />
+                <WeatherMetric 
+                  icon={Thermometer} 
+                  label="Feels Like" 
+                  value={Math.round(weather.temp) - 2} // Simulated for now
+                  unit="°C" 
+                />
+              </div>
+
+              {/* AI Analysis Action */}
               {!analysis && (
                 <Button
                   onClick={handleAnalyzeClick}
                   disabled={isAnalyzing || cooldown > 0}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+                  className={cn(
+                    "w-full mt-2 font-medium tracking-wide transition-all shadow-lg hover:shadow-cyan-500/20",
+                    isAnalyzing 
+                      ? "bg-slate-800 text-slate-400" 
+                      : cooldown > 0
+                        ? "bg-slate-800 text-slate-500"
+                        : "bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white border border-white/10"
+                  )}
                 >
                   {isAnalyzing ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Analyzing Sector...
+                      PROCESSING DATA...
                     </>
                   ) : cooldown > 0 ? (
-                    <>⏳ Wait {cooldown}s</>
+                    <span className="font-mono text-xs">RECHARGE: {cooldown}s</span>
                   ) : (
                     <>
                       <Sparkles className="mr-2 h-4 w-4" />
-                      Generate AI Report
+                      GENERATE AI ANALYSIS
                     </>
                   )}
                 </Button>
@@ -293,10 +415,18 @@ const ControlPanel = ({
               {analysis && <AnalysisResult analysis={analysis} />}
             </>
           ) : (
-            <div className="text-sm text-red-400">Data unavailable</div>
+            <div className="py-6 text-center">
+              <div className="text-4xl mb-2">📡</div>
+              <div className="text-sm text-slate-400">No telemetry data available.</div>
+            </div>
           )}
         </CardContent>
       </Card>
+      
+      {/* Footer / Credits style */}
+      <div className="text-[10px] text-slate-600 text-center font-mono">
+        SYSTEM V2.0 • ONLINE
+      </div>
     </div>
   );
 };
