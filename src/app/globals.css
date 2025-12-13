@@ -116,7 +116,73 @@
   * {
     @apply border-border outline-ring/50;
   }
+  
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+  }
+
+  /* Custom Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.3);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.5);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.8);
+  }
+
+  /* Selection styling */
+  ::selection {
+    background-color: rgba(99, 102, 241, 0.3);
+    color: inherit;
+  }
+
+  /* Focus visible improvements */
+  :focus-visible {
+    outline: 2px solid rgba(99, 102, 241, 0.6);
+    outline-offset: 2px;
+  }
+}
+
+/* Performance optimizations */
+@layer utilities {
+  .gpu-accelerate {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+
+  .smooth-transition {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .animate-bounce-slow {
+    animation: bounce-slow 3s ease-in-out infinite;
+  }
+}
+
+/* Custom animations */
+@keyframes bounce-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
   }
 }

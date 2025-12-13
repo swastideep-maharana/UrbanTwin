@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Map from "@/components/Maps";
 import ControlPanel from "@/components/ControlPanel";
+import WeatherOverlay from "@/components/WeatherOverlay";
 import { getWeatherData, getCityAnalysis, getCoordinates } from "@/app/actions";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
 
@@ -140,6 +141,15 @@ export default function Home() {
 
   return (
     <main className="relative min-h-screen w-full">
+      {/* 1. The Map (Background Layer) */}
+      <Map viewState={viewState} isOrbiting={isOrbiting} time={time} />
+      
+      {/* 2. Weather Overlay (Particle Layer - sits on top of map, under UI) */}
+      {weather && (
+        <WeatherOverlay condition={weather.condition} />
+      )}
+
+      {/* 3. Control Panel (UI Layer - always on top) */}
       <ControlPanel
         onCitySearch={handleCitySearch}
         selectedCityName={activeCity}
@@ -156,7 +166,6 @@ export default function Home() {
         isListening={isListening}
         lastCommand={lastTranscript}
       />
-      <Map viewState={viewState} isOrbiting={isOrbiting} time={time} />
     </main>
   );
 }

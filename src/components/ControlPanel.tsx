@@ -66,15 +66,15 @@ const WeatherDisplay = memo(({ weather }: { weather: WeatherData }) => (
         <div className="text-4xl font-bold">{weather.temp}°C</div>
         <div className="text-slate-400 capitalize">{weather.description}</div>
       </div>
-      <div className="text-4xl">{WEATHER_ICONS[weather.condition] || "🌡️"}</div>
+      <div className="text-4xl animate-bounce-slow">{WEATHER_ICONS[weather.condition] || "🌡️"}</div>
     </div>
 
     <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-700">
-      <div>
+      <div className="transition-all hover:scale-105">
         <div className="text-xs text-slate-400">HUMIDITY</div>
         <div className="font-mono text-lg">{weather.humidity}%</div>
       </div>
-      <div>
+      <div className="transition-all hover:scale-105">
         <div className="text-xs text-slate-400">WIND SPEED</div>
         <div className="font-mono text-lg">{weather.windSpeed} m/s</div>
       </div>
