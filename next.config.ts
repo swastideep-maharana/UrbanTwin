@@ -21,48 +21,10 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-slider', '@radix-ui/react-slot'],
   },
   
-  // Webpack optimizations
-  webpack: (config, { dev, isServer }) => {
-    // Production optimizations
-    if (!dev && !isServer) {
-      config.optimization = {
-        ...config.optimization,
-        moduleIds: 'deterministic',
-        runtimeChunk: 'single',
-        splitChunks: {
-          chunks: 'all',
-          cacheGroups: {
-            default: false,
-            vendors: false,
-            // Vendor chunk for node_modules
-            vendor: {
-              name: 'vendor',
-              chunks: 'all',
-              test: /node_modules/,
-              priority: 20,
-            },
-            // Separate chunk for mapbox (it's large)
-            mapbox: {
-              name: 'mapbox',
-              test: /[\\/]node_modules[\\/](mapbox-gl)[\\/]/,
-              chunks: 'all',
-              priority: 30,
-            },
-            // Common chunk for shared code
-            common: {
-              name: 'common',
-              minChunks: 2,
-              chunks: 'all',
-              priority: 10,
-              reuseExistingChunk: true,
-              enforce: true,
-            },
-          },
-        },
-      };
-    }
-    
-    return config;
+  // Turbopack configuration (Next.js 16+)
+  turbopack: {
+    // Empty config to silence the warning - Turbopack works great out of the box!
+    // The default settings are already optimized for performance
   },
   
   // Headers for caching
