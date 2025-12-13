@@ -13,6 +13,7 @@ const INITIAL_CITY = {
 } as const;
 
 const DEFAULT_ZOOM = 13;
+const DEFAULT_TIME = 10; // 10:00 AM
 
 type WeatherData = {
   temp: number;
@@ -24,7 +25,11 @@ type WeatherData = {
 
 export default function Home() {
   const [activeCity, setActiveCity] = useState(INITIAL_CITY.name);
-  const [viewState, setViewState] = useState({
+  const [viewState, setViewState] = useState<{
+    longitude: number;
+    latitude: number;
+    zoom: number;
+  }>({
     longitude: INITIAL_CITY.longitude,
     latitude: INITIAL_CITY.latitude,
     zoom: INITIAL_CITY.zoom,
@@ -35,6 +40,7 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isOrbiting, setIsOrbiting] = useState(false);
+  const [time, setTime] = useState(DEFAULT_TIME);
 
   const fetchWeather = async (lat: number, lon: number) => {
     setIsLoading(true);
@@ -99,8 +105,10 @@ export default function Home() {
         isAnalyzing={isAnalyzing}
         isOrbiting={isOrbiting}
         onToggleOrbit={() => setIsOrbiting(!isOrbiting)}
+        time={time}
+        onTimeChange={setTime}
       />
-      <Map viewState={viewState} isOrbiting={isOrbiting} />
+      <Map viewState={viewState} isOrbiting={isOrbiting} time={time} />
     </main>
   );
 }

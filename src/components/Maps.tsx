@@ -100,9 +100,10 @@ interface MapProps {
     zoom: number;
   };
   isOrbiting: boolean;
+  time: number; // 0-24 hours for solar simulation
 }
 
-const Map = ({ viewState, isOrbiting }: MapProps) => {
+const Map = ({ viewState, isOrbiting, time }: MapProps) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const requestRef = useRef<number | null>(null);
@@ -305,6 +306,58 @@ const Map = ({ viewState, isOrbiting }: MapProps) => {
       }
     };
   }, [isOrbiting, config.ORBIT_SPEED, performanceLevel]);
+
+  // Solar simulation - Update sun position based on time
+  useEffect(() => {
+    if (!mapRef.current || !mapRef.current.isStyleLoaded()) return;
+    if (!config.ENABLE_SKY) return; // Skip if sky is disabled for performance
+
+    // Calculate sun position based on time (0-24)
+    // Azimuth: Angle around horizon (0=North, 90=East, 180=South, 270=West)
+    // Time 6am = East (90°), Noon = South (180°), 6pm = West (270°)
+    const azimuth = 180 + (time - 12) * 15;
+
+    // Polar: Angle from zenith (0=directly above, 90=horizon)
+    // Noon = low angle (sun high), Sunrise/Sunset = high angle (sun at horizon)
+    const polar = 90 - Math.sin((time - 6) * Math.PI / 12) * 80;
+    const safePolar = Math.max(5, Math.min(85, polar));
+
+    // Calculate sun intensity (bright at noon, dark at night)
+    const intensity = Math.max(0, Math.sin((time - 6) * Math.PI / 12) * 30);
+
+    // Update sky layer if it exists
+    if (mapRef.current.getLayer('sky')) {
+      mapRef.current.setPaintProperty('sky', 'sky-atmosphere-sun', [azimuth, safePolar]);
+      mapRef.current.setPaintProperty('sky', 'sky-atmosphere-sun-intensity', intensity);
+
+      // Change sky color based on time of day
+      let skyColor: string = COLORS.SKY; // Default night color
+      
+      if (time >= 5 && time < 7) {
+        // Dawn - orange/pink
+        skyColor = '#ff6b35';
+      } else if (time >= 7 && time < 17) {
+        // Day - light blue
+        skyColor = '#87ceeb';
+      } else if (time >= 17 && time < 19) {
+        // Dusk - purple/orange
+        skyColor = '#ff6b9d';
+      }
+      
+      mapRef.current.setPaintProperty('sky', 'sky-atmosphere-color', skyColor);
+    }
+
+    // Update fog based on time (denser at dawn/dusk)
+    if (config.ENABLE_FOG && mapRef.current.getFog()) {
+      const fogDensity = 1 - Math.abs(time - 12) / 12; // Denser away from noon
+      mapRef.current.setFog({
+        range: [0.5, 10],
+        color: time >= 6 && time <= 18 ? '#e0e7ff' : COLORS.FOG.COLOR,
+        'high-color': time >= 6 && time <= 18 ? '#c7d2fe' : COLORS.FOG.HIGH,
+        'space-color': COLORS.FOG.SPACE,
+      });
+    }
+  }, [time, config.ENABLE_SKY, config.ENABLE_FOG]);
 
   return (
     <>

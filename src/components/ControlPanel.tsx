@@ -4,7 +4,8 @@ import React, { useState, useCallback, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Sparkles, Search, MapPin, Camera } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Loader2, Sparkles, Search, MapPin, Camera, Sun, Moon } from "lucide-react";
 
 const COOLDOWN_DURATION = 10;
 const WEATHER_ICONS: Record<string, string> = {
@@ -34,9 +35,26 @@ interface ControlPanelProps {
   isAnalyzing: boolean;
   isOrbiting: boolean;
   onToggleOrbit: () => void;
+  time: number;
+  onTimeChange: (val: number) => void;
 }
 
-// Memoized sub-components to prevent unnecessary re-renders
+// Helper to format time (e.g. 14.5 -> "14:30")
+const formatTime = (val: number) => {
+  const hours = Math.floor(val);
+  const minutes = Math.floor((val - hours) * 60);
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+};
+
+// Get time period icon and label
+const getTimePeriod = (time: number) => {
+  if (time >= 5 && time < 7) return { icon: Sun, label: "Dawn", color: "text-orange-400" };
+  if (time >= 7 && time < 17) return { icon: Sun, label: "Day", color: "text-yellow-400" };
+  if (time >= 17 && time < 19) return { icon: Sun, label: "Dusk", color: "text-pink-400" };
+  return { icon: Moon, label: "Night", color: "text-indigo-400" };
+};
+
+// Memoized sub-components
 const WeatherDisplay = memo(({ weather }: { weather: WeatherData }) => (
   <>
     <div className="flex items-center justify-between border-b border-slate-700 pb-4">
@@ -84,10 +102,15 @@ const ControlPanel = ({
   isAnalyzing,
   isOrbiting,
   onToggleOrbit,
+  time,
+  onTimeChange,
 }: ControlPanelProps) => {
   const [searchInput, setSearchInput] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+
+  const timePeriod = getTimePeriod(time);
+  const TimePeriodIcon = timePeriod.icon;
 
   const handleSearchSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,6 +187,31 @@ const ControlPanel = ({
             >
               <Camera className="h-4 w-4" />
             </Button>
+          </div>
+
+          {/* Solar Time Slider */}
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
+              <span className={`flex items-center gap-1 ${timePeriod.color}`}>
+                <TimePeriodIcon className="h-3 w-3" />
+                {timePeriod.label}
+              </span>
+              <span className="text-slate-300">{formatTime(time)}</span>
+            </div>
+            <Slider
+              value={[time]}
+              max={24}
+              step={0.1}
+              onValueChange={(vals: number[]) => onTimeChange(vals[0])}
+              className="cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-slate-500">
+              <span>00:00</span>
+              <span>06:00</span>
+              <span>12:00</span>
+              <span>18:00</span>
+              <span>24:00</span>
+            </div>
           </div>
 
           <div className="flex items-center justify-between text-sm text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-800">
