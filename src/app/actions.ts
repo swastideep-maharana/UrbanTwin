@@ -56,6 +56,20 @@ export async function getWeatherData(lat: number, lon: number){
     }
 }
 
+// Mock analysis generator for when API is unavailable
+function getMockAnalysis(city: string, weather: any): string {
+  const analyses = {
+    Clear: `${city} operations nominal. Clear conditions support optimal traffic flow and pedestrian activity. Energy demand moderate with favorable outdoor conditions. No weather-related advisories at this time.`,
+    Clouds: `${city} monitoring cloudy conditions. Visibility remains good for all transport modes. Slight increase in lighting demand anticipated. Standard operational protocols in effect.`,
+    Rain: `${city} weather alert: Precipitation detected. Traffic delays expected on major arterials. Pedestrian safety protocols activated. Drainage systems engaged. Recommend reduced speeds and increased following distance.`,
+    Snow: `${city} winter operations active. Road treatment crews deployed. Public transit may experience delays. Pedestrians advised to use designated walkways. Energy demand elevated for heating systems.`,
+    Thunderstorm: `${city} severe weather protocol. Lightning risk high - outdoor activities restricted. Traffic management systems on standby. Emergency services on alert. Citizens advised to seek shelter.`,
+  };
+  
+  const condition = weather.condition as keyof typeof analyses;
+  return analyses[condition] || analyses.Clear;
+}
+
 export async function getCityAnalysis(city: string, weather: any) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -87,7 +101,13 @@ export async function getCityAnalysis(city: string, weather: any) {
   } catch (error: any) {
     console.error("AI Analysis failed:", error);
     
-    // Handle specific error types
+    // Handle quota exhaustion (most common with exposed API keys)
+    if (error.status === 429 && error.message?.includes("quota")) {
+      console.warn("⚠️ Gemini API quota exhausted. Using mock analysis.");
+      return `🤖 [Demo Mode] ${getMockAnalysis(city, weather)}`;
+    }
+    
+    // Handle rate limiting (temporary)
     if (error.status === 429) {
       return "⏳ Rate limit reached. Please wait 60 seconds before requesting another analysis.";
     }

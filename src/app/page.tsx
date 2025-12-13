@@ -29,6 +29,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isOrbiting, setIsOrbiting] = useState(false); // NEW STATE: Orbit toggle
 
   const fetchWeather = async (lat: number, lon: number) => {
     setIsLoading(true);
@@ -58,6 +59,8 @@ export default function Home() {
         });
         // 3. Update Weather
         await fetchWeather(coords.latitude, coords.longitude);
+        // 4. Stop orbiting when moving to a new city so user gets oriented
+        setIsOrbiting(false);
       } else {
         alert("City not found!");
       }
@@ -95,8 +98,10 @@ export default function Home() {
         onAnalyze={handleAnalyze}
         analysis={analysis}
         isAnalyzing={isAnalyzing}
+        isOrbiting={isOrbiting} // NEW: Pass orbit state
+        onToggleOrbit={() => setIsOrbiting(!isOrbiting)} // NEW: Pass toggle handler
       />
-      <Map viewState={viewState} />
+      <Map viewState={viewState} isOrbiting={isOrbiting} />
     </main>
   );
 }

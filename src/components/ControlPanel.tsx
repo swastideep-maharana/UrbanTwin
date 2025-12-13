@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Sparkles, Search, MapPin } from "lucide-react";
+import { Loader2, Sparkles, Search, MapPin, Camera } from "lucide-react"; // Import Camera icon
 
 // Define the shape of Weather Data
 interface WeatherData {
@@ -23,6 +23,9 @@ interface ControlPanelProps {
   onAnalyze: () => Promise<void>;
   analysis: string | null;
   isAnalyzing: boolean;
+  // NEW PROPS
+  isOrbiting: boolean;
+  onToggleOrbit: () => void;
 }
 
 const ControlPanel = ({ 
@@ -32,7 +35,9 @@ const ControlPanel = ({
   isLoading,
   onAnalyze,
   analysis,
-  isAnalyzing
+  isAnalyzing,
+  isOrbiting,
+  onToggleOrbit
 }: ControlPanelProps) => {
   const [searchInput, setSearchInput] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -78,18 +83,31 @@ const ControlPanel = ({
         </CardHeader>
         <CardContent className="space-y-4">
           
-          {/* Search Bar */}
-          <form onSubmit={handleSearchSubmit} className="flex gap-2">
-            <Input 
-              placeholder="Search city..." 
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
-            />
-            <Button type="submit" size="icon" disabled={isSearching} className="bg-indigo-600 hover:bg-indigo-700">
-              {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          {/* Search Bar with Orbit Toggle */}
+          <div className="flex gap-2">
+            <form onSubmit={handleSearchSubmit} className="flex gap-2 flex-1">
+              <Input 
+                placeholder="Search city..." 
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
+              />
+              <Button type="submit" size="icon" disabled={isSearching} className="bg-indigo-600 hover:bg-indigo-700">
+                {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              </Button>
+            </form>
+            
+            {/* Orbit Toggle Button */}
+            <Button 
+              size="icon" 
+              onClick={onToggleOrbit}
+              variant={isOrbiting ? "default" : "outline"}
+              className={`border-slate-700 ${isOrbiting ? "bg-amber-500 hover:bg-amber-600 text-white animate-pulse" : "bg-slate-900 text-slate-400 hover:text-white"}`}
+              title="Toggle Drone Orbit"
+            >
+              <Camera className="h-4 w-4" />
             </Button>
-          </form>
+          </div>
 
           {/* Current Location Badge */}
           <div className="flex items-center justify-between text-sm text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-800">
