@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Loader2, Sparkles, Search, MapPin } from "lucide-react";
 
 // Define the shape of Weather Data
 interface WeatherData {
@@ -14,66 +16,118 @@ interface WeatherData {
 }
 
 interface ControlPanelProps {
-  onSelectCity: (city: string) => void;
-  selectedCityName: string; // New Prop: Which city is active?
-  weather: WeatherData | null; // New Prop: The live data
-  isLoading: boolean; // New Prop: Loading state
-  onAnalyze: () => void; // NEW: Trigger AI analysis
-  analysis: string | null; // NEW: AI analysis result
-  isAnalyzing: boolean; // NEW: AI loading state
+  onCitySearch: (city: string) => Promise<void>; // Updated Prop
+  selectedCityName: string;
+  weather: WeatherData | null;
+  isLoading: boolean;
+  onAnalyze: () => Promise<void>;
+  analysis: string | null;
+  isAnalyzing: boolean;
 }
 
-const ControlPanel = ({ onSelectCity, selectedCityName, weather, isLoading, onAnalyze, analysis, isAnalyzing }: ControlPanelProps) => {
+const ControlPanel = ({ 
+  onCitySearch, 
+  selectedCityName, 
+  weather, 
+  isLoading,
+  onAnalyze,
+  analysis,
+  isAnalyzing
+}: ControlPanelProps) => {
+  const [searchInput, setSearchInput] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  const handleSearchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchInput.trim()) return;
+    
+    setIsSearching(true);
+    await onCitySearch(searchInput);
+    setIsSearching(false);
+    setSearchInput(""); // Clear input after search
+  };
+
+  const handleAnalyzeClick = async () => {
+    if (cooldown > 0) return;
+    
+    await onAnalyze();
+    
+    // Start 10-second cooldown
+    setCooldown(10);
+    const interval = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   return (
     <div className="absolute top-4 left-4 z-10 w-80 space-y-4">
-      {/* 1. City Selector */}
+      {/* Search & Location Card */}
       <Card className="bg-black/80 border-slate-800 text-slate-100 backdrop-blur-md shadow-2xl">
-        <CardHeader>
-          <CardTitle className="text-lg font-bold">UrbanTwin Control</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-bold flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-indigo-500" />
+            UrbanTwin
+          </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {["NYC", "London", "Tokyo"].map((city) => (
-            <Button 
-              key={city}
-              variant={selectedCityName === city ? "default" : "secondary"} // Highlight active city
-              onClick={() => onSelectCity(city)}
-              className="w-full justify-start hover:bg-slate-700 transition-all"
-            >
-              {city === "NYC" && "🗽"}
-              {city === "London" && "💂"}
-              {city === "Tokyo" && "🗼"}
-              <span className="ml-2">{city}</span>
+        <CardContent className="space-y-4">
+          
+          {/* Search Bar */}
+          <form onSubmit={handleSearchSubmit} className="flex gap-2">
+            <Input 
+              placeholder="Search city..." 
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
+            />
+            <Button type="submit" size="icon" disabled={isSearching} className="bg-indigo-600 hover:bg-indigo-700">
+              {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             </Button>
-          ))}
+          </form>
+
+          {/* Current Location Badge */}
+          <div className="flex items-center justify-between text-sm text-slate-400 bg-slate-900/50 p-2 rounded border border-slate-800">
+            <span>Active Sector:</span>
+            <span className="font-bold text-white tracking-wide">{selectedCityName}</span>
+          </div>
+
         </CardContent>
       </Card>
 
-      {/* 2. Live Data Card */}
+      {/* Live Data & AI Section */}
       <Card className="bg-slate-900/90 border-slate-700 text-slate-100 backdrop-blur-md shadow-2xl">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm uppercase tracking-wider text-slate-400">
             Live Conditions
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {isLoading ? (
-            <div className="text-sm text-slate-400 animate-pulse">Fetching satellite data...</div>
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+               <Loader2 className="h-4 w-4 animate-spin" /> Aligning satellites...
+            </div>
           ) : weather ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
+            <>
+              <div className="flex items-center justify-between border-b border-slate-700 pb-4">
                 <div>
                   <div className="text-4xl font-bold">{weather.temp}°C</div>
                   <div className="text-slate-400 capitalize">{weather.description}</div>
                 </div>
-                {/* Dynamic Emoji based on condition */}
                 <div className="text-4xl">
                     {weather.condition === "Clear" && "☀️"}
                     {weather.condition === "Clouds" && "☁️"}
-                    {weather.condition === "Rain" && "qh️"}
+                    {weather.condition === "Rain" && "🌧️"}
+                    {weather.condition === "Snow" && "❄️"}
                 </div>
               </div>
-              
-              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-700">
+
+              <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-700">
                 <div>
                     <div className="text-xs text-slate-400">HUMIDITY</div>
                     <div className="font-mono text-lg">{weather.humidity}%</div>
@@ -83,39 +137,42 @@ const ControlPanel = ({ onSelectCity, selectedCityName, weather, isLoading, onAn
                     <div className="font-mono text-lg">{weather.windSpeed} m/s</div>
                 </div>
               </div>
-            </div>
+
+              {!analysis && (
+                <Button 
+                  onClick={handleAnalyzeClick} 
+                  disabled={isAnalyzing || cooldown > 0}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing Sector...
+                    </>
+                  ) : cooldown > 0 ? (
+                    <>
+                      ⏳ Wait {cooldown}s
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" /> Generate AI Report
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {analysis && (
+                <div className="bg-slate-800 p-3 rounded-md border border-slate-600 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex items-center gap-2 mb-2 text-xs text-indigo-400 font-bold uppercase">
+                    <Sparkles className="h-3 w-3" /> Gemini Insight
+                  </div>
+                  <p className="text-sm text-slate-300 leading-relaxed">
+                    {analysis}
+                  </p>
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-sm text-red-400">Data unavailable</div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* 3. AI Analysis Card */}
-      <Card className="bg-gradient-to-br from-purple-900/90 to-blue-900/90 border-purple-700 text-slate-100 backdrop-blur-md shadow-2xl">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm uppercase tracking-wider text-purple-200 flex items-center gap-2">
-            <span>🤖</span> AI City Analysis
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button 
-            onClick={onAnalyze}
-            disabled={!weather || isAnalyzing}
-            className="w-full mb-3 bg-purple-600 hover:bg-purple-500 transition-all disabled:opacity-50"
-          >
-            {isAnalyzing ? "Analyzing..." : "Generate Analysis"}
-          </Button>
-          
-          {analysis && (
-            <div className="text-sm leading-relaxed text-slate-200 bg-black/30 p-3 rounded-md border border-purple-500/30">
-              {analysis}
-            </div>
-          )}
-          
-          {!analysis && !isAnalyzing && (
-            <div className="text-xs text-purple-300/70 italic text-center">
-              Click to get AI-powered city operations insights
-            </div>
           )}
         </CardContent>
       </Card>

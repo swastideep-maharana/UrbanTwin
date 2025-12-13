@@ -65,7 +65,7 @@ export async function getCityAnalysis(city: string, weather: any) {
 
   const genAI = new GoogleGenerativeAI(apiKey);
   // Use gemini-2.0-flash for fast, reliable performance
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   const prompt = `
     You are an expert Urban Planner and City Operations Manager.
@@ -84,8 +84,49 @@ export async function getCityAnalysis(city: string, weather: any) {
     const result = await model.generateContent(prompt);
     const response = await result.response;
     return response.text();
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Analysis failed:", error);
-    return "System offline. Unable to generate analysis.";
+    
+    // Handle specific error types
+    if (error.status === 429) {
+      return "⏳ Rate limit reached. Please wait 60 seconds before requesting another analysis.";
+    }
+    
+    if (error.status === 401 || error.status === 403) {
+      return "🔑 API authentication failed. Please check your GEMINI_API_KEY.";
+    }
+    
+    if (error.message?.includes("API key")) {
+      return "🔑 Invalid API key. Please regenerate your Gemini API key.";
+    }
+    
+    return "⚠️ System temporarily offline. Please try again in a moment.";
+  }
+}
+
+export async function getCoordinates(cityName: string) {
+  const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (!MAPBOX_TOKEN) throw new Error("Mapbox Token missing");
+
+  try {
+    // Call Mapbox Geocoding API
+    const response = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(cityName)}.json?access_token=${MAPBOX_TOKEN}&limit=1`,
+      { cache: 'force-cache' } // Cache common searches
+    );
+    const data = await response.json();
+
+    if (data.features && data.features.length > 0) {
+      const [lng, lat] = data.features[0].center;
+      return { 
+        longitude: lng, 
+        latitude: lat,
+        name: data.features[0].text 
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Geocoding failed:", error);
+    return null;
   }
 }

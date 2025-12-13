@@ -3,13 +3,10 @@
 import { useState, useEffect } from "react";
 import Map from "@/components/Maps";
 import ControlPanel from "@/components/ControlPanel";
-import { getWeatherData, getCityAnalysis } from "@/app/actions"; // Import new action
+import { getWeatherData, getCityAnalysis, getCoordinates } from "@/app/actions"; // Import new action
 
-const CITIES = {
-  NYC: { longitude: -74.006, latitude: 40.7128, zoom: 15.5 },
-  London: { longitude: -0.1276, latitude: 51.5072, zoom: 15.5 },
-  Tokyo: { longitude: 139.6917, latitude: 35.6895, zoom: 15.5 },
-};
+// Initial city to load
+const INITIAL_CITY = { longitude: -74.006, latitude: 40.7128, zoom: 15.5, name: "New York" };
 
 // Define types locally
 type WeatherData = {
@@ -21,21 +18,22 @@ type WeatherData = {
 };
 
 export default function Home() {
-  const [activeCity, setActiveCity] = useState("NYC");
-  const [viewState, setViewState] = useState(CITIES.NYC);
+  const [activeCity, setActiveCity] = useState(INITIAL_CITY.name);
+  const [viewState, setViewState] = useState({
+    longitude: INITIAL_CITY.longitude,
+    latitude: INITIAL_CITY.latitude,
+    zoom: INITIAL_CITY.zoom
+  });
+  
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // NEW STATE
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Function to fetch data
   const fetchWeather = async (lat: number, lon: number) => {
     setIsLoading(true);
-    setAnalysis(null); // Reset analysis when changing cities
+    setAnalysis(null);
     try {
-      // Call Server Action
       const data = await getWeatherData(lat, lon);
       setWeather(data);
     } catch (err) {
@@ -45,7 +43,30 @@ export default function Home() {
     }
   };
 
-  // NEW HANDLER: Calls the AI
+  // NEW: Search Handler
+  const handleCitySearch = async (cityName: string) => {
+    try {
+      // 1. Get Coordinates
+      const coords = await getCoordinates(cityName);
+      if (coords) {
+        // 2. Update Map
+        setActiveCity(coords.name);
+        setViewState({
+          longitude: coords.longitude,
+          latitude: coords.latitude,
+          zoom: 13 // Start slightly zoomed out for new cities
+        });
+        // 3. Update Weather
+        await fetchWeather(coords.latitude, coords.longitude);
+      } else {
+        alert("City not found!");
+      }
+    } catch (error) {
+      console.error("Search failed", error);
+    }
+  };
+
+  // AI Handler
   const handleAnalyze = async () => {
     if (!weather) return;
     setIsAnalyzing(true);
@@ -61,27 +82,16 @@ export default function Home() {
 
   // Initial Load
   useEffect(() => {
-    fetchWeather(CITIES.NYC.latitude, CITIES.NYC.longitude);
+    fetchWeather(INITIAL_CITY.latitude, INITIAL_CITY.longitude);
   }, []);
-
-  const handleSelectCity = (cityKey: string) => {
-    const city = CITIES[cityKey as keyof typeof CITIES];
-    if (city) {
-      setActiveCity(cityKey);
-      setViewState(city);
-      // Fetch new weather data when city changes
-      fetchWeather(city.latitude, city.longitude);
-    }
-  };
 
   return (
     <main className="relative min-h-screen w-full">
       <ControlPanel 
-        onSelectCity={handleSelectCity} 
+        onCitySearch={handleCitySearch} // Pass the search handler
         selectedCityName={activeCity}
         weather={weather}
         isLoading={isLoading}
-        // Pass new props
         onAnalyze={handleAnalyze}
         analysis={analysis}
         isAnalyzing={isAnalyzing}
