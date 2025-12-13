@@ -74,11 +74,13 @@ const ControlPanel = ({
   return (
     <div className="absolute top-4 left-4 z-10 w-80 space-y-4">
       {/* Search & Location Card */}
-      <Card className="bg-black/80 border-slate-800 text-slate-100 backdrop-blur-md shadow-2xl">
+      <Card className="bg-slate-900/60 border-white/10 backdrop-blur-xl text-slate-100 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)]">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg font-bold flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-indigo-500" />
-            UrbanTwin
+            <MapPin className="h-5 w-5 text-cyan-400" />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+              UrbanTwin
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -119,7 +121,7 @@ const ControlPanel = ({
       </Card>
 
       {/* Live Data & AI Section */}
-      <Card className="bg-slate-900/90 border-slate-700 text-slate-100 backdrop-blur-md shadow-2xl">
+      <Card className="bg-slate-900/60 border-white/10 backdrop-blur-xl text-slate-100 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)]">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm uppercase tracking-wider text-slate-400">
             Live Conditions

@@ -27,10 +27,11 @@ const Map = ({ viewState, isOrbiting }: MapProps) => { // Receive props here
     if (mapContainerRef.current) {
       mapRef.current = new mapboxgl.Map({
         container: mapContainerRef.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
+        // Neon-focused cyberpunk style
+        style: 'mapbox://styles/mapbox/navigation-night-v1',
         center: [viewState.longitude, viewState.latitude], // Use prop
         zoom: viewState.zoom, // Use prop
-        pitch: 55,
+        pitch: 60, // Increase pitch slightly for more drama
         bearing: -17.6,
         antialias: true,
         interactive: true // Allow user to stop orbit by grabbing map
@@ -38,20 +39,24 @@ const Map = ({ viewState, isOrbiting }: MapProps) => { // Receive props here
 
       mapRef.current.on('load', () => {
         if (!mapRef.current) return;
-        mapRef.current.addLayer({
-          'id': '3d-buildings',
-          'source': 'composite',
-          'source-layer': 'building',
-          'filter': ['==', 'extrude', 'true'],
-          'type': 'fill-extrusion',
-          'minzoom': 15,
-          'paint': {
-            'fill-extrusion-color': '#2a2a2a',
-            'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['get', 'height']],
-            'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['get', 'min_height']],
-            'fill-extrusion-opacity': 0.8
-          }
-        });
+        
+        // Add 3D Buildings (only if it doesn't exist)
+        if (!mapRef.current.getLayer('3d-buildings')) {
+          mapRef.current.addLayer({
+            'id': '3d-buildings',
+            'source': 'composite',
+            'source-layer': 'building',
+            'filter': ['==', 'extrude', 'true'],
+            'type': 'fill-extrusion',
+            'minzoom': 15,
+            'paint': {
+              'fill-extrusion-color': '#2a2a2a',
+              'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['get', 'height']],
+              'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['get', 'min_height']],
+              'fill-extrusion-opacity': 0.8
+            }
+          });
+        }
         
         // Add sky atmosphere
         mapRef.current.setFog({
@@ -60,6 +65,39 @@ const Map = ({ viewState, isOrbiting }: MapProps) => { // Receive props here
             'high-color': '#161b33',
             'space-color': '#0b0e1f'
         });
+
+        // Add Traffic Source (only if it doesn't exist)
+        if (!mapRef.current.getSource('mapbox-traffic')) {
+          mapRef.current.addSource('mapbox-traffic', {
+            type: 'vector',
+            url: 'mapbox://mapbox.mapbox-traffic-v1'
+          });
+        }
+
+        // Add Traffic Layer (only if it doesn't exist)
+        if (!mapRef.current.getLayer('traffic-flow')) {
+          mapRef.current.addLayer({
+            'id': 'traffic-flow',
+            'type': 'line',
+            'source': 'mapbox-traffic',
+            'source-layer': 'traffic',
+            'paint': {
+              'line-width': 2,
+              // Color logic: low traffic = green, heavy = red
+              'line-color': [
+                'match',
+                ['get', 'congestion'],
+                'low', '#059669',    // Green (Emerald-600)
+                'moderate', '#d97706', // Orange (Amber-600)
+                'heavy', '#dc2626',    // Red (Red-600)
+                'severe', '#7f1d1d',   // Dark Red
+                '#ffffff' // Fallback
+              ],
+              // Make the lines glow slightly
+              'line-opacity': 0.8
+            }
+          });
+        }
       });
     }
     return () => { mapRef.current?.remove(); };
