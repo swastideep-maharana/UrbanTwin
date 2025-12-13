@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Map from "@/components/Maps";
 import ControlPanel from "@/components/ControlPanel";
-import { getWeatherData } from "@/app/actions"; // Import the Server Action
+import { getWeatherData, getCityAnalysis } from "@/app/actions"; // Import new action
 
 const CITIES = {
   NYC: { longitude: -74.006, latitude: 40.7128, zoom: 15.5 },
@@ -25,10 +25,15 @@ export default function Home() {
   const [viewState, setViewState] = useState(CITIES.NYC);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // NEW STATE
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Function to fetch data
   const fetchWeather = async (lat: number, lon: number) => {
     setIsLoading(true);
+    setAnalysis(null); // Reset analysis when changing cities
     try {
       // Call Server Action
       const data = await getWeatherData(lat, lon);
@@ -37,6 +42,20 @@ export default function Home() {
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // NEW HANDLER: Calls the AI
+  const handleAnalyze = async () => {
+    if (!weather) return;
+    setIsAnalyzing(true);
+    try {
+      const result = await getCityAnalysis(activeCity, weather);
+      setAnalysis(result);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -62,6 +81,10 @@ export default function Home() {
         selectedCityName={activeCity}
         weather={weather}
         isLoading={isLoading}
+        // Pass new props
+        onAnalyze={handleAnalyze}
+        analysis={analysis}
+        isAnalyzing={isAnalyzing}
       />
       <Map viewState={viewState} />
     </main>

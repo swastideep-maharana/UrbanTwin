@@ -18,9 +18,12 @@ interface ControlPanelProps {
   selectedCityName: string; // New Prop: Which city is active?
   weather: WeatherData | null; // New Prop: The live data
   isLoading: boolean; // New Prop: Loading state
+  onAnalyze: () => void; // NEW: Trigger AI analysis
+  analysis: string | null; // NEW: AI analysis result
+  isAnalyzing: boolean; // NEW: AI loading state
 }
 
-const ControlPanel = ({ onSelectCity, selectedCityName, weather, isLoading }: ControlPanelProps) => {
+const ControlPanel = ({ onSelectCity, selectedCityName, weather, isLoading, onAnalyze, analysis, isAnalyzing }: ControlPanelProps) => {
   return (
     <div className="absolute top-4 left-4 z-10 w-80 space-y-4">
       {/* 1. City Selector */}
@@ -83,6 +86,36 @@ const ControlPanel = ({ onSelectCity, selectedCityName, weather, isLoading }: Co
             </div>
           ) : (
             <div className="text-sm text-red-400">Data unavailable</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 3. AI Analysis Card */}
+      <Card className="bg-gradient-to-br from-purple-900/90 to-blue-900/90 border-purple-700 text-slate-100 backdrop-blur-md shadow-2xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm uppercase tracking-wider text-purple-200 flex items-center gap-2">
+            <span>🤖</span> AI City Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button 
+            onClick={onAnalyze}
+            disabled={!weather || isAnalyzing}
+            className="w-full mb-3 bg-purple-600 hover:bg-purple-500 transition-all disabled:opacity-50"
+          >
+            {isAnalyzing ? "Analyzing..." : "Generate Analysis"}
+          </Button>
+          
+          {analysis && (
+            <div className="text-sm leading-relaxed text-slate-200 bg-black/30 p-3 rounded-md border border-purple-500/30">
+              {analysis}
+            </div>
+          )}
+          
+          {!analysis && !isAnalyzing && (
+            <div className="text-xs text-purple-300/70 italic text-center">
+              Click to get AI-powered city operations insights
+            </div>
           )}
         </CardContent>
       </Card>

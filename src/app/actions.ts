@@ -1,5 +1,7 @@
 "use server";
 
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 // Mock weather data for development/fallback
 function getMockWeatherData(lat: number, lon: number) {
     // Different mock data based on approximate location
@@ -52,4 +54,38 @@ export async function getWeatherData(lat: number, lon: number){
         console.warn("Falling back to mock weather data");
         return getMockWeatherData(lat, lon);
     }
+}
+
+export async function getCityAnalysis(city: string, weather: any) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("Gemini API Key missing");
+    return "AI analysis unavailable. Please configure GEMINI_API_KEY.";
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  // Use gemini-2.0-flash for fast, reliable performance
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+
+  const prompt = `
+    You are an expert Urban Planner and City Operations Manager.
+    The current situation in ${city} is:
+    - Condition: ${weather.condition} (${weather.description})
+    - Temperature: ${weather.temp}°C
+    - Wind Speed: ${weather.windSpeed} m/s
+    - Humidity: ${weather.humidity}%
+
+    Based *only* on this data, provide a brief, professional "City Operations Update" (max 3 sentences). 
+    Focus on potential impacts to traffic flow, energy grid usage, or pedestrian safety. 
+    Do not use markdown formatting. Be direct and authoritative.
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    console.error("AI Analysis failed:", error);
+    return "System offline. Unable to generate analysis.";
+  }
 }
