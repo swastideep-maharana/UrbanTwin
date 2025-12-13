@@ -20,9 +20,9 @@ const WEATHER_ICONS: Record<string, string> = {
   Thunderstorm: "⛈️",
 };
 
-// Enhanced Glassmorphism Style
-const GLASS_PANEL = "bg-slate-950/70 border-white/10 backdrop-blur-2xl text-slate-100 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] ring-1 ring-white/5";
-const INPUT_STYLE = "bg-slate-900/50 border-slate-700/50 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/50 focus-visible:border-cyan-500 transition-all duration-300";
+// Extraordinary Glassmorphism Style
+const GLASS_PANEL = "bg-zinc-950/80 border-white/10 backdrop-blur-3xl text-zinc-100 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.7)] ring-1 ring-white/10 relative group";
+const INPUT_STYLE = "bg-black/40 border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-cyan-500/50 focus-visible:border-cyan-500/80 transition-all duration-500 hover:bg-black/60 hover:border-white/20";
 
 interface WeatherData {
   temp: number;
@@ -83,18 +83,25 @@ const WeatherMetric = ({ icon: Icon, label, value, unit }: { icon: React.Element
 );
 
 const AnalysisResult = memo(({ analysis }: { analysis: string }) => (
-  <div className="bg-gradient-to-br from-slate-900/90 to-slate-900/50 p-4 rounded-lg border border-indigo-500/20 animate-in fade-in slide-in-from-bottom-2 shadow-inner shadow-black/20">
-    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/5">
-      <div className="bg-indigo-500/20 p-1.5 rounded-md text-indigo-400">
-        <Sparkles className="h-3.5 w-3.5" />
+  <div className="relative overflow-hidden p-0.5 rounded-xl bg-gradient-to-br from-cyan-500/50 via-indigo-500/50 to-purple-500/50 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="bg-zinc-950/95 backdrop-blur-2xl p-5 rounded-[10px] relative">
+       {/* Holographic sheers */}
+       <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+       
+      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/5">
+        <div className="bg-indigo-500/10 p-2 rounded-lg text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+          <Sparkles className="h-4 w-4 animate-pulse" />
+        </div>
+        <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300 uppercase tracking-[0.2em]">
+          AI SECTOR ANALYSIS
+        </span>
       </div>
-      <span className="text-xs font-bold text-indigo-300 uppercase tracking-widest">
-        AI Sector Analysis
-      </span>
+      <div className="max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-indigo-500/20 scrollbar-track-transparent hover:scrollbar-thumb-indigo-500/40 transition-colors">
+        <p className="text-sm text-zinc-300 leading-7 font-light tracking-wide text-justify font-sans selection:bg-indigo-500/30">
+          {analysis}
+        </p>
+      </div>
     </div>
-    <p className="text-sm text-slate-300 leading-relaxed font-light tracking-wide text-justify">
-      {analysis}
-    </p>
   </div>
 ));
 
@@ -155,10 +162,14 @@ const ControlPanel = ({
   }, [cooldown, onAnalyze]);
 
   return (
-    <div className="absolute top-4 left-4 z-10 w-[22rem] flex flex-col gap-4 max-h-[calc(100vh-2rem)] overflow-y-auto pr-2 scrollbar-none">
+    <div className="absolute top-4 left-4 z-10 w-[22rem] flex flex-col gap-4 max-h-[calc(100vh-2rem)] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
       {/* Header & Search Card */}
       <Card className={cn(GLASS_PANEL, "overflow-hidden")}>
-        <CardHeader className="pb-3 pt-4 px-4 bg-gradient-to-r from-slate-900/50 to-transparent">
+          {/* Subtle Grid Overlay */}
+          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-soft-light pointer-events-none" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+
+        <CardHeader className="pb-3 pt-4 px-4 bg-gradient-to-r from-zinc-900/50 to-transparent relative z-10">
           <CardTitle className="text-xl font-black tracking-tighter flex items-center gap-2.5">
             <div className="bg-cyan-500/10 p-1.5 rounded-lg border border-cyan-500/20">
               <MapPin className="h-5 w-5 text-cyan-400" />

@@ -79,10 +79,10 @@ const getMapConfig = (performanceLevel: 'high' | 'medium' | 'low', theme: 'dark'
 const COLORS = {
   BUILDING: '#2a2a2a',
   TRAFFIC: {
-    LOW: '#059669',
-    MODERATE: '#d97706',
-    HEAVY: '#dc2626',
-    SEVERE: '#7f1d1d',
+    LOW: '#4ade80',      // neon green
+    MODERATE: '#facc15', // neon yellow
+    HEAVY: '#f87171',    // neon red
+    SEVERE: '#ef4444',   // intense red
     FALLBACK: '#ffffff',
   },
   SKY: '#0b0e1f',
@@ -156,8 +156,17 @@ const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels 
               type: 'fill-extrusion',
               minzoom: 15,
               paint: {
-                 // Use different colors for light mode if needed, but for now stick to dark buildings or adapt
-                'fill-extrusion-color': theme === 'light' ? '#cbd5e1' : COLORS.BUILDING,
+                // Advanced Gradient Buildings
+                'fill-extrusion-color': [
+                  'interpolate',
+                  ['linear'],
+                  ['get', 'height'],
+                  0, theme === 'light' ? '#e2e8f0' : '#1e293b',
+                  50, theme === 'light' ? '#cbd5e1' : '#334155',
+                  100, theme === 'light' ? '#94a3b8' : '#475569',
+                  200, theme === 'light' ? '#64748b' : '#6366f1', // Indigo top for skyscrapers in dark mode
+                  400, theme === 'light' ? '#475569' : '#8b5cf6'  // Violet peaks
+                ],
                 'fill-extrusion-height': [
                   'interpolate',
                   ['linear'],
@@ -180,13 +189,35 @@ const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels 
             });
           }
 
-          // Add fog (only on high/medium performance)
+          // Data-Grid Wireframe (Footprint)
+          if (!mapRef.current.getLayer('3d-buildings-wireframe')) {
+            mapRef.current.addLayer({
+              id: '3d-buildings-wireframe',
+              source: 'composite',
+              'source-layer': 'building',
+              filter: ['==', 'extrude', 'true'],
+              type: 'line',
+              minzoom: 15,
+              paint: {
+                'line-color': theme === 'light' ? '#94a3b8' : '#00ffd5', // Cyan neon edges
+                'line-width': 1,
+                'line-opacity': 0.15,
+                'line-blur': 1,
+              },
+              layout: {
+                visibility: showModels ? 'visible' : 'none'
+              }
+            });
+          }
+
+          // Cinematic Fog
           if (config.ENABLE_FOG) {
-            mapRef.current.setFog({
-              range: [0.5, 10],
-              color: theme === 'light' ? '#e2e8f0' : COLORS.FOG.COLOR,
-              'high-color': theme === 'light' ? '#f8fafc' : COLORS.FOG.HIGH,
-              'space-color': theme === 'light' ? '#f1f5f9' : COLORS.FOG.SPACE,
+             mapRef.current.setFog({
+              range: [0.8, 8],
+              color: theme === 'light' ? '#e2e8f0' : '#0f172a',
+              'high-color': theme === 'light' ? '#f8fafc' : '#1e1b4b',
+              'space-color': theme === 'light' ? '#f1f5f9' : '#020617',
+              'horizon-blend': 0.1
             });
           }
 
@@ -206,7 +237,7 @@ const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels 
                 source: 'mapbox-traffic',
                 'source-layer': 'traffic',
                 paint: {
-                  'line-width': 2,
+                  'line-width': 3, // Thicker lines
                   'line-color': [
                     'match',
                     ['get', 'congestion'],
@@ -216,7 +247,8 @@ const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels 
                     'severe', COLORS.TRAFFIC.SEVERE,
                     COLORS.TRAFFIC.FALLBACK,
                   ],
-                  'line-opacity': 0.8,
+                  'line-opacity': 0.9,
+                  'line-blur': 0.5, // Slight glow
                 },
               });
             }
@@ -264,7 +296,6 @@ const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels 
           }
 
           layersInitialized.current = true;
-          console.log(`Map initialized. Theme: ${theme}, Models: ${showModels}`);
         };
 
         // Use requestIdleCallback if available, otherwise setTimeout

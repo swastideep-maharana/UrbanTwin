@@ -61,13 +61,11 @@ export const useVoiceCommand = (commands: CommandAction[]) => {
       rec.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript.toLowerCase();
         setLastTranscript(transcript);
-        console.log("Heard:", transcript);
 
         // Check if the spoken text matches any command keywords
         commands.forEach((cmd) => {
           if (cmd.keywords.some((keyword) => transcript.includes(keyword))) {
             cmd.action();
-            console.log("Executing command:", cmd.keywords[0]);
           }
         });
         setIsListening(false);
