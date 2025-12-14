@@ -84,7 +84,8 @@
   
   body {
     @apply bg-background text-foreground;
-    overflow-x: hidden;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   /* Custom Scrollbar Styling */
@@ -133,6 +134,15 @@
 
   .animate-bounce-slow {
     animation: bounce-slow 3s ease-in-out infinite;
+  }
+  
+  /* Hide scrollbar utility */
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
   }
 }
 

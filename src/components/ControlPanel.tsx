@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, Search, MapPin, Camera, Sun, Moon, Mic, MicOff, Wind, Droplets, Thermometer, Radio } from "lucide-react";
+import { Loader2, Sparkles, Search, MapPin, Camera, Sun, Moon, Mic, MicOff, Wind, Droplets, Thermometer, Radio, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const COOLDOWN_DURATION = 10;
@@ -130,6 +130,7 @@ const ControlPanel = ({
   const [searchInput, setSearchInput] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   const timePeriod = getTimePeriod(time);
   const TimePeriodIcon = timePeriod.icon;
@@ -162,7 +163,15 @@ const ControlPanel = ({
   }, [cooldown, onAnalyze]);
 
   return (
-    <div className="absolute top-4 left-4 z-10 w-[22rem] flex flex-col gap-4 max-h-[calc(100vh-2rem)] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+    <div className={cn(
+      "absolute z-10 flex flex-col gap-3 transition-all duration-300 ease-in-out",
+      // Mobile: Inset from top/left/right, fluid width
+      "top-2 left-2 right-2 md:right-auto md:w-[22rem]",
+      // Desktop: Fixed position and width
+      "md:top-4 md:left-4",
+      // Scroll handling
+      "max-h-[calc(100vh-1rem)] overflow-y-auto scrollbar-none md:scrollbar-thin md:scrollbar-thumb-zinc-700 md:scrollbar-track-transparent"
+    )}>
       {/* Header & Search Card */}
       <Card className={cn(GLASS_PANEL, "overflow-hidden")}>
           {/* Subtle Grid Overlay */}
@@ -170,17 +179,28 @@ const ControlPanel = ({
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
 
         <CardHeader className="pb-3 pt-4 px-4 bg-gradient-to-r from-zinc-900/50 to-transparent relative z-10">
-          <CardTitle className="text-xl font-black tracking-tighter flex items-center gap-2.5">
-            <div className="bg-cyan-500/10 p-1.5 rounded-lg border border-cyan-500/20">
-              <MapPin className="h-5 w-5 text-cyan-400" />
-            </div>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-cyan-400 filter drop-shadow-sm">
-              URBANTWIN
-            </span>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-black tracking-tighter flex items-center gap-2.5">
+              <div className="bg-cyan-500/10 p-1.5 rounded-lg border border-cyan-500/20">
+                <MapPin className="h-5 w-5 text-cyan-400" />
+              </div>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-cyan-400 filter drop-shadow-sm">
+                URBANTWIN
+              </span>
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-slate-400 hover:text-white hover:bg-white/10 rounded-full md:hidden"
+              onClick={() => setIsExpanded(!isExpanded)}
+            >
+              {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            </Button>
+          </div>
         </CardHeader>
         
-        <CardContent className="space-y-4 px-4 pb-4">
+        {isExpanded && (
+        <CardContent className="space-y-4 px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-300">
           {/* Active Sector Display */}
           <div className="flex items-center justify-between text-sm bg-slate-950/40 p-2.5 rounded-lg border border-white/5 group transition-colors hover:border-white/10">
             <div className="flex flex-col">
@@ -338,10 +358,13 @@ const ControlPanel = ({
             </div>
           </div>
         </CardContent>
+        )}
       </Card>
 
-      {/* Live Data & AI Panel */}
-      <Card className={cn(GLASS_PANEL, "transition-all duration-300")}>
+      {/* Live Data & AI Panel - Only show if expanded */}
+      {isExpanded && (
+        <>
+            <Card className={cn(GLASS_PANEL, "transition-all duration-300 animate-in fade-in slide-in-from-top-4 duration-500 delay-100")}>
         <CardHeader className="pb-2 px-4 pt-4 border-b border-white/5">
           <CardTitle className="text-xs font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse" />
@@ -432,12 +455,14 @@ const ControlPanel = ({
             </div>
           )}
         </CardContent>
-      </Card>
+            </Card>
       
       {/* Footer / Credits style */}
-      <div className="text-[10px] text-slate-600 text-center font-mono">
+      <div className="text-[10px] text-slate-600/80 text-center font-mono pb-2 md:pb-0">
         SYSTEM V2.0 • ONLINE
       </div>
+      </>
+      )}
     </div>
   );
 };
