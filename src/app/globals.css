@@ -163,6 +163,33 @@
     @apply text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-400;
   }
 
+  .animate-spin-slow {
+    animation: spin 8s linear infinite;
+  }
+
+  /* Mechanical Transitions */
+  .animate-vertical-shutter {
+    animation: vertical-shutter 0.4s cubic-bezier(0.85, 0, 0.15, 1) forwards;
+    transform-origin: top;
+  }
+
+  @keyframes vertical-shutter {
+    from {
+      opacity: 0;
+      transform: scaleY(0);
+      clip-path: inset(0 0 100% 0);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1);
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  .hydraulic-pop {
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
   .animate-hologram {
     animation: hologram-scan 4s linear infinite;
   }

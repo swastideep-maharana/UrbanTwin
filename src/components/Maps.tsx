@@ -6,499 +6,188 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
-// Debounce helper for performance
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
-  return (...args: Parameters<T>) => {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
+// Distance calc (Haversine)
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371e3; // metres
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
 }
 
-// Performance-based configuration
+const getFogConfig = (aqi: number, theme: 'dark' | 'light'): mapboxgl.FogSpecification => {
+  const intensity = Math.min(1, Math.max(0, (aqi - 1) / 4));
+  return {
+    range: [0.4, 10 - (intensity * 7)] as [number, number],
+    color: theme === 'light' ? '#e2e8f0' : (intensity > 0.5 ? '#1e293b' : '#0f172a'),
+    'high-color': theme === 'light' ? '#cbd5e1' : '#1e1bc3',
+    'space-color': theme === 'light' ? '#f1f5f9' : '#020617',
+    'horizon-blend': 0.05 + (intensity * 0.15)
+  };
+};
 
-// Performance-based configuration
-const getMapConfig = (performanceLevel: 'high' | 'medium' | 'low', theme: 'dark' | 'light') => {
+interface MapConfiguration {
+  STYLE: string;
+  PITCH: number;
+  BEARING: number;
+  ORBIT_SPEED: number;
+  ENABLE_TRAFFIC: boolean;
+  ENABLE_FOG: boolean;
+  BUILDING_OPACITY: number;
+}
+
+const getMapConfig = (performanceLevel: 'high' | 'medium' | 'low', theme: 'dark' | 'light'): MapConfiguration => {
   const baseConfig = {
-    STYLE: theme === 'dark' 
-      ? 'mapbox://styles/mapbox/navigation-night-v1' 
-      : 'mapbox://styles/mapbox/navigation-day-v1',
+    STYLE: theme === 'dark' ? 'mapbox://styles/mapbox/navigation-night-v1' : 'mapbox://styles/mapbox/navigation-day-v1',
     PITCH: 60,
     BEARING: -17.6,
-    FLY_DURATION: 3000,
   };
-
   switch (performanceLevel) {
-    case 'high':
-      return {
-        ...baseConfig,
-        TERRAIN_EXAGGERATION: 1.5,
-        ORBIT_SPEED: 0.1,
-        ENABLE_TERRAIN: true,
-        ENABLE_TRAFFIC: true,
-        ENABLE_FOG: true,
-        ENABLE_SKY: true,
-        BUILDING_OPACITY: 0.8,
-        ANTIALIAS: true,
-        MAX_TILE_CACHE: 150,
-      };
-    case 'medium':
-      return {
-        ...baseConfig,
-        TERRAIN_EXAGGERATION: 1.2,
-        ORBIT_SPEED: 0.08,
-        ENABLE_TERRAIN: true,
-        ENABLE_TRAFFIC: true,
-        ENABLE_FOG: false,
-        ENABLE_SKY: false,
-        BUILDING_OPACITY: 0.7,
-        ANTIALIAS: true,
-        MAX_TILE_CACHE: 100,
-      };
-    case 'low':
-      return {
-        ...baseConfig,
-        PITCH: 45,
-        TERRAIN_EXAGGERATION: 0,
-        ORBIT_SPEED: 0.05,
-        ENABLE_TERRAIN: false,
-        ENABLE_TRAFFIC: false,
-        ENABLE_FOG: false,
-        ENABLE_SKY: false,
-        BUILDING_OPACITY: 0.6,
-        ANTIALIAS: false,
-        MAX_TILE_CACHE: 50,
-      };
+    case 'high': return { ...baseConfig, ORBIT_SPEED: 0.1, ENABLE_TRAFFIC: true, ENABLE_FOG: true, BUILDING_OPACITY: 0.8 };
+    case 'medium': return { ...baseConfig, ORBIT_SPEED: 0.08, ENABLE_TRAFFIC: true, ENABLE_FOG: true, BUILDING_OPACITY: 0.7 };
+    case 'low': return { ...baseConfig, ORBIT_SPEED: 0, ENABLE_TRAFFIC: false, ENABLE_FOG: false, BUILDING_OPACITY: 0.6 };
+    default: return { ...baseConfig, ORBIT_SPEED: 0.08, ENABLE_TRAFFIC: true, ENABLE_FOG: true, BUILDING_OPACITY: 0.7 };
   }
 };
 
-const COLORS = {
-  BUILDING: '#2a2a2a',
-  TRAFFIC: {
-    LOW: '#4ade80',      // neon green
-    MODERATE: '#facc15', // neon yellow
-    HEAVY: '#f87171',    // neon red
-    SEVERE: '#ef4444',   // intense red
-    FALLBACK: '#ffffff',
-  },
-  SKY: '#0b0e1f',
-  FOG: {
-    COLOR: '#242b4b',
-    HIGH: '#161b33',
-    SPACE: '#0b0e1f',
-  },
-} as const;
-
-import { PerformanceLevel } from "@/hooks/usePerformance";
-
 interface MapProps {
-  viewState: {
-    longitude: number;
-    latitude: number;
-    zoom: number;
-  };
+  viewState: { longitude: number; latitude: number; zoom: number };
   isOrbiting: boolean;
   time: number;
-  performanceLevel: PerformanceLevel;
+  performanceLevel: 'high' | 'medium' | 'low';
   theme: 'dark' | 'light';
   showModels: boolean;
+  interactionMode: 'none' | 'probe' | 'ruler';
+  onBuildingSelect: (building: any) => void;
+  onMeasureUpdate: (points: any[]) => void;
+  aqiValue: number;
 }
 
-const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels }: MapProps) => {
+const Map = ({ 
+  viewState, isOrbiting, time, performanceLevel, theme, showModels,
+  interactionMode, onBuildingSelect, onMeasureUpdate, aqiValue
+}: MapProps) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const requestRef = useRef<number | null>(null);
-  
-  // Re-calculate config when props change (specifically theme)
-  const config = React.useMemo(() => getMapConfig(performanceLevel, theme), [performanceLevel, theme]);
-  
-  const layersInitialized = useRef(false);
+  const modeRef = useRef(interactionMode);
+  const measurePointsRef = useRef<any[]>([]);
 
-    // Initialize map
+  useEffect(() => { modeRef.current = interactionMode; }, [interactionMode]);
+
   useEffect(() => {
-    if (mapRef.current || !mapContainerRef.current) return;
+    if (!mapContainerRef.current) return;
 
-    try {
-      mapRef.current = new mapboxgl.Map({
-        container: mapContainerRef.current,
-        style: config.STYLE,
-        center: [viewState.longitude, viewState.latitude],
-        zoom: viewState.zoom,
-        pitch: config.PITCH,
-        bearing: config.BEARING,
-        antialias: config.ANTIALIAS,
-        interactive: true,
-        // Performance optimizations
-        preserveDrawingBuffer: false,
-        refreshExpiredTiles: false,
-        maxTileCacheSize: config.MAX_TILE_CACHE,
-        fadeDuration: 0, // Disable fade for better performance
-      });
+    const config = getMapConfig(performanceLevel, theme);
+    const map = new mapboxgl.Map({
+      container: mapContainerRef.current,
+      style: config.STYLE,
+      center: [viewState.longitude, viewState.latitude],
+      zoom: viewState.zoom,
+      pitch: config.PITCH || 60,
+      bearing: config.BEARING || 0,
+    });
 
-      mapRef.current.on('load', () => {
-        if (!mapRef.current || layersInitialized.current) return;
+    mapRef.current = map;
 
-        // Use requestIdleCallback for non-critical layer initialization
-        const initializeLayers = () => {
-          if (!mapRef.current) return;
-
-          // Add 3D buildings - visibility controlled dynamically now, but we add it if not present
-          if (!mapRef.current.getLayer('3d-buildings')) {
-            mapRef.current.addLayer({
-              id: '3d-buildings',
-              source: 'composite',
-              'source-layer': 'building',
-              filter: ['==', 'extrude', 'true'],
-              type: 'fill-extrusion',
-              minzoom: 15,
-              paint: {
-                // Advanced Gradient Buildings
-                'fill-extrusion-color': [
-                  'interpolate',
-                  ['linear'],
-                  ['get', 'height'],
-                  0, theme === 'light' ? '#e2e8f0' : '#1e293b',
-                  50, theme === 'light' ? '#cbd5e1' : '#334155',
-                  100, theme === 'light' ? '#94a3b8' : '#475569',
-                  200, theme === 'light' ? '#64748b' : '#6366f1', // Indigo top for skyscrapers in dark mode
-                  400, theme === 'light' ? '#475569' : '#8b5cf6'  // Violet peaks
-                ],
-                'fill-extrusion-height': [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  15, 0,
-                  15.05, ['get', 'height']
-                ],
-                'fill-extrusion-base': [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  15, 0,
-                  15.05, ['get', 'min_height']
-                ],
-                'fill-extrusion-opacity': config.BUILDING_OPACITY,
-              },
-              layout: {
-                visibility: showModels ? 'visible' : 'none'
-              }
-            });
+    map.on('load', () => {
+      // Traffic
+      if (config.ENABLE_TRAFFIC) {
+        map.addSource('traffic', { type: 'vector', url: 'mapbox://mapbox.mapbox-traffic-v1' });
+        map.addLayer({
+          id: 'traffic-flow', type: 'line', source: 'traffic', 'source-layer': 'traffic',
+          paint: {
+            'line-width': 2,
+            'line-color': ['match', ['get', 'congestion'], 'low', '#4ade80', 'moderate', '#facc15', 'heavy', '#f87171', 'severe', '#ef4444', '#6366f1'],
+            'line-opacity': 0.7
           }
-
-          // Data-Grid Wireframe (Footprint)
-          if (!mapRef.current.getLayer('3d-buildings-wireframe')) {
-            mapRef.current.addLayer({
-              id: '3d-buildings-wireframe',
-              source: 'composite',
-              'source-layer': 'building',
-              filter: ['==', 'extrude', 'true'],
-              type: 'line',
-              minzoom: 15,
-              paint: {
-                'line-color': theme === 'light' ? '#94a3b8' : '#00ffd5', // Cyan neon edges
-                'line-width': 1,
-                'line-opacity': 0.15,
-                'line-blur': 1,
-              },
-              layout: {
-                visibility: showModels ? 'visible' : 'none'
-              }
-            });
-          }
-
-          // Cinematic Fog
-          if (config.ENABLE_FOG) {
-             mapRef.current.setFog({
-              range: [0.8, 8],
-              color: theme === 'light' ? '#e2e8f0' : '#0f172a',
-              'high-color': theme === 'light' ? '#f8fafc' : '#1e1b4b',
-              'space-color': theme === 'light' ? '#f1f5f9' : '#020617',
-              'horizon-blend': 0.1
-            });
-          }
-
-          // Add traffic (only on high/medium performance)
-          if (config.ENABLE_TRAFFIC) {
-            if (!mapRef.current.getSource('mapbox-traffic')) {
-              mapRef.current.addSource('mapbox-traffic', {
-                type: 'vector',
-                url: 'mapbox://mapbox.mapbox-traffic-v1',
-              });
-            }
-
-            if (!mapRef.current.getLayer('traffic-flow')) {
-              mapRef.current.addLayer({
-                id: 'traffic-flow',
-                type: 'line',
-                source: 'mapbox-traffic',
-                'source-layer': 'traffic',
-                paint: {
-                  'line-width': 3, // Thicker lines
-                  'line-color': [
-                    'match',
-                    ['get', 'congestion'],
-                    'low', COLORS.TRAFFIC.LOW,
-                    'moderate', COLORS.TRAFFIC.MODERATE,
-                    'heavy', COLORS.TRAFFIC.HEAVY,
-                    'severe', COLORS.TRAFFIC.SEVERE,
-                    COLORS.TRAFFIC.FALLBACK,
-                  ],
-                  'line-opacity': 0.9,
-                  'line-blur': 0.5, // Slight glow
-                },
-              });
-            }
-          }
-
-          // Add terrain (only on high/medium performance)
-          if (config.ENABLE_TERRAIN && config.TERRAIN_EXAGGERATION > 0) {
-            if (!mapRef.current.getSource('mapbox-dem')) {
-              mapRef.current.addSource('mapbox-dem', {
-                type: 'raster-dem',
-                url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-                tileSize: 512,
-                maxzoom: 14,
-              });
-            }
-
-            mapRef.current.setTerrain({
-              source: 'mapbox-dem',
-              exaggeration: config.TERRAIN_EXAGGERATION,
-            });
-          }
-
-          // Add atmospheric sky (only on high performance)
-          if (config.ENABLE_SKY) {
-            if (!mapRef.current.getLayer('sky')) {
-              mapRef.current.addLayer({
-                id: 'sky',
-                type: 'sky',
-                paint: {
-                  'sky-type': 'atmosphere',
-                  'sky-atmosphere-sun': [0.0, 0.0],
-                  'sky-atmosphere-sun-intensity': 15,
-                  'sky-atmosphere-color': COLORS.SKY,
-                  'sky-opacity': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    0, 1,
-                    5, 1,
-                    22, 0,
-                  ],
-                },
-              });
-            }
-          }
-
-          layersInitialized.current = true;
-        };
-
-        // Use requestIdleCallback if available, otherwise setTimeout
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(initializeLayers);
-        } else {
-          setTimeout(initializeLayers, 100);
-        }
-      });
-    } catch (error) {
-      console.error("Error initializing map:", error);
-    }
-
-    return () => {
-      mapRef.current?.remove();
-      mapRef.current = null;
-      layersInitialized.current = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount? Ideally we re-init if style changes or handle it dynamically.
-
-  // Handle Style (Theme) Change dynamically without full re-mount if possible, 
-  // or simple way: just update style.
-  useEffect(() => {
-    if (!mapRef.current) return;
-    mapRef.current.setStyle(config.STYLE);
-    // Note: setStyle removes all custom layers. We need to re-add them.
-    // simpler to just flip layersInitialized to false and let the 'style.load' event handle re-adding?
-    // Mapbox fires 'style.load' after setStyle.
-    layersInitialized.current = false; 
-    
-    // We need to listen to the new style load. 
-    // The previous 'load' listener was one-off on init.
-    // Let's add a permanent style.load listener in the main effect? 
-    // For now, let's just accept that changing theme might flick.
-    // Better approach:
-    const onStyleLoad = () => {
-       if (layersInitialized.current) return;
-       // Re-run layer initialization logic... 
-       // For brevity in this refactor, full re-mount via key is often safest for React+Mapbox if style changes.
-       // But let's try to handle it.
-       // We'll rely on the main useEffect dependencies to re-trigger if we add theme to it?
-       // No, mapbox instance should stay.
-    };
-    mapRef.current.once('style.load', onStyleLoad);
-    
-  }, [config.STYLE]); 
-  
-  // Actually, standard practice for React Mapbox usually involves either a wrapper that handles diffing 
-  // or a key prop to force remount. 
-  // Given the complexity of "re-adding layers after style change", forcing a re-mount when theme changes 
-  // is acceptable for a prototype/MVP to avoid race conditions.
-  // We can achieve this by adding `key={theme}` to the <Map /> component in page.tsx, 
-  // OR we just handle it here.
-  // Let's update visibility of models dynamically
-  useEffect(() => {
-    if (!mapRef.current || !mapRef.current.getLayer('3d-buildings')) return;
-    mapRef.current.setLayoutProperty('3d-buildings', 'visibility', showModels ? 'visible' : 'none');
-  }, [showModels]);
-
-
-// Handle view state changes with debouncing
-  useEffect(() => {
-    if (!mapRef.current) return;
-
-    const updateView = () => {
-      if (!mapRef.current) return;
-      
-      mapRef.current.flyTo({
-        center: [viewState.longitude, viewState.latitude],
-        zoom: viewState.zoom,
-        essential: true,
-        duration: config.FLY_DURATION,
-        curve: 1.5,
-        speed: 1.2,
-        easing: (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, // easeInOutQuad
-      });
-    };
-
-    const debouncedUpdate = debounce(updateView, 100);
-    debouncedUpdate();
-  }, [viewState.longitude, viewState.latitude, viewState.zoom, config.FLY_DURATION]);
-
-  // Holographic Marker for active location
-  useEffect(() => {
-    if (!mapRef.current) return;
-    
-    // Create marker element
-    const el = document.createElement('div');
-    el.className = 'w-10 h-10 relative group';
-    el.innerHTML = `
-      <div class="absolute inset-0 bg-cyan-500/20 rounded-full animate-ping"></div>
-      <div class="absolute inset-0 border-2 border-cyan-400 rounded-full animate-pulse shadow-[0_0_15px_rgba(34,211,238,0.5)]"></div>
-      <div class="absolute inset-[30%] bg-cyan-400 rounded-full shadow-[0_0_10px_rgba(34,211,238,0.8)]"></div>
-      <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-0.5 glass-morphism rounded text-[8px] font-black text-cyan-400 uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Active Sector</div>
-    `;
-
-    const marker = new mapboxgl.Marker(el)
-      .setLngLat([viewState.longitude, viewState.latitude])
-      .addTo(mapRef.current);
-
-    return () => {
-      marker.remove();
-    };
-  }, [viewState.longitude, viewState.latitude]);
-
-  // Handle orbit animation with performance throttling
-  useEffect(() => {
-    if (!mapRef.current) return;
-
-    let frameCount = 0;
-    const skipFrames = performanceLevel === 'low' ? 2 : 0;
-
-    const rotateCamera = () => {
-      if (!mapRef.current) return;
-
-      frameCount++;
-      
-      if (frameCount % (skipFrames + 1) === 0) {
-        const currentBearing = mapRef.current.getBearing();
-        mapRef.current.easeTo({
-          bearing: (currentBearing + config.ORBIT_SPEED) % 360,
-          duration: 100,
-          easing: (t) => t,
         });
       }
 
-      requestRef.current = requestAnimationFrame(rotateCamera);
-    };
+      // Buildings
+      map.addLayer({
+        id: '3d-buildings', source: 'composite', 'source-layer': 'building', filter: ['==', 'extrude', 'true'], type: 'fill-extrusion', minzoom: 12,
+        paint: {
+          'fill-extrusion-color': theme === 'light' ? '#cbd5e1' : '#1e293b',
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': ['get', 'min_height'],
+          'fill-extrusion-opacity': config.BUILDING_OPACITY || 0.8,
+        }
+      });
 
-    if (isOrbiting) {
-      requestRef.current = requestAnimationFrame(rotateCamera);
-    } else if (requestRef.current) {
-      cancelAnimationFrame(requestRef.current);
-    }
+      // Ruler Layer
+      map.addSource('measure', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'measure-line', type: 'line', source: 'measure',
+        paint: { 'line-color': '#a855f7', 'line-width': 3, 'line-dasharray': [1, 1] }
+      });
+      map.addLayer({
+        id: 'measure-points', type: 'circle', source: 'measure',
+        paint: { 'circle-radius': 4, 'circle-color': '#a855f7', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' }
+      });
 
-    return () => {
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
+      if (config.ENABLE_FOG) map.setFog(getFogConfig(aqiValue, theme));
+    });
+
+    map.on('click', (e) => {
+      const mode = modeRef.current;
+      if (mode === 'probe') {
+        const features = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] });
+        if (features.length > 0) {
+          const b = features[0];
+          onBuildingSelect({ id: b.id || `B-${Math.floor(Math.random() * 10000)}`, height: b.properties?.height || 20, type: b.properties?.type || 'STRUCTURE' });
+        }
+      } else if (mode === 'ruler') {
+        if (measurePointsRef.current.length >= 2) measurePointsRef.current = [];
+        measurePointsRef.current.push({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+        const geojson: any = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'MultiPoint', coordinates: measurePointsRef.current.map(p => [p.lng, p.lat]) } }] };
+        if (measurePointsRef.current.length === 2) {
+          const [p1, p2] = measurePointsRef.current;
+          const dist = getDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+          geojson.features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[p1.lng, p1.lat], [p2.lng, p2.lat]] } });
+          onMeasureUpdate([p1, p2, dist]);
+        } else { onMeasureUpdate([measurePointsRef.current[0]]); }
+        (map.getSource('measure') as mapboxgl.GeoJSONSource)?.setData(geojson);
       }
-    };
-  }, [isOrbiting, config.ORBIT_SPEED, performanceLevel]);
+    });
 
-  // Solar simulation - Update sun position based on time (debounced)
+    return () => map.remove();
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    const config = getMapConfig(performanceLevel, theme);
+    if (config.ENABLE_FOG) map.setFog(getFogConfig(aqiValue, theme));
+    if (map.getLayer('3d-buildings')) {
+      map.setLayoutProperty('3d-buildings', 'visibility', showModels ? 'visible' : 'none');
+      map.setPaintProperty('3d-buildings', 'fill-extrusion-opacity', config.BUILDING_OPACITY || 0.8);
+    }
+  }, [aqiValue, theme, performanceLevel, showModels]);
+
   useEffect(() => {
     if (!mapRef.current) return;
-    // Only run solar calc if sky is enabled AND we are generally in a state where visual updates matter
-    if (!config.ENABLE_SKY) return;
+    mapRef.current.flyTo({ center: [viewState.longitude, viewState.latitude], zoom: viewState.zoom, duration: 2000 });
+  }, [viewState]);
 
-    const updateSolarPosition = () => {
-      // Need to check if style is loaded because we might be switching themes
-      if (!mapRef.current || !mapRef.current.isStyleLoaded()) return; 
-      if (!mapRef.current.getLayer('sky')) return;
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (isOrbiting) {
+      const rotate = () => {
+        if (!mapRef.current) return;
+        const config = getMapConfig(performanceLevel, theme);
+        mapRef.current.easeTo({ bearing: mapRef.current.getBearing() + (config.ORBIT_SPEED || 0), duration: 100, easing: t => t });
+        requestRef.current = requestAnimationFrame(rotate);
+      };
+      requestRef.current = requestAnimationFrame(rotate);
+    } else if (requestRef.current) { cancelAnimationFrame(requestRef.current); }
+    return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
+  }, [isOrbiting, performanceLevel, theme]);
 
-      const azimuth = 180 + (time - 12) * 15;
-      const polar = 90 - Math.sin((time - 6) * Math.PI / 12) * 80;
-      const safePolar = Math.max(5, Math.min(85, polar));
-      const intensity = Math.max(0, Math.sin((time - 6) * Math.PI / 12) * 30);
-
-      mapRef.current.setPaintProperty('sky', 'sky-atmosphere-sun', [azimuth, safePolar]);
-      mapRef.current.setPaintProperty('sky', 'sky-atmosphere-sun-intensity', intensity);
-
-      let skyColor: string = COLORS.SKY;
-      
-      if (time >= 5 && time < 7) {
-        skyColor = '#ff6b35';
-      } else if (time >= 7 && time < 17) {
-        skyColor = '#87ceeb';
-      } else if (time >= 17 && time < 19) {
-        skyColor = '#ff6b9d';
-      }
-      
-      mapRef.current.setPaintProperty('sky', 'sky-atmosphere-color', skyColor);
-    };
-
-    // Debounce solar updates
-    const debouncedUpdate = debounce(updateSolarPosition, 50);
-    debouncedUpdate();
-  }, [time, config.ENABLE_SKY]); // Removed ENABLE_FOG from dependency to avoid complexity
-
-  return (
-    <>
-      <div ref={mapContainerRef} className="w-full h-screen" />
-      {/* Performance indicator */}
-      <div className="absolute top-4 right-4 md:top-auto md:bottom-4 md:right-4 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-xs text-slate-400 border border-slate-700 pointer-events-none z-0">
-        {performanceLevel === 'high' && '🚀 High Performance'}
-        {performanceLevel === 'medium' && '⚡ Medium Performance'}
-        {performanceLevel === 'low' && '🐢 Optimized Mode'}
-      </div>
-    </>
-  );
+  return <div ref={mapContainerRef} className="w-full h-screen" />;
 };
 
-// Memoize to prevent unnecessary re-renders
-export default memo(Map, (prevProps, nextProps) => {
-  return (
-    prevProps.viewState.longitude === nextProps.viewState.longitude &&
-    prevProps.viewState.latitude === nextProps.viewState.latitude &&
-    prevProps.viewState.zoom === nextProps.viewState.zoom &&
-    prevProps.isOrbiting === nextProps.isOrbiting &&
-    prevProps.time === nextProps.time &&
-    prevProps.performanceLevel === nextProps.performanceLevel &&
-    prevProps.theme === nextProps.theme &&
-    prevProps.showModels === nextProps.showModels
-  );
-});
+export default memo(Map);

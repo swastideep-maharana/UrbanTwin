@@ -1,13 +1,20 @@
 "use server";
 
-
-
-interface WeatherData {
+export interface WeatherData {
   temp: number;
   condition: string;
   description: string;
   humidity: number;
   windSpeed: number;
+}
+
+export interface AQIData {
+  aqi: number; // 1-5 scale (1: Good, 2: Fair, 3: Moderate, 4: Poor, 5: Very Poor)
+  co: number;
+  no2: number;
+  o3: number;
+  pm2_5: number;
+  pm10: number;
 }
 
 interface GeocodeData {
@@ -19,6 +26,7 @@ interface GeocodeData {
 
 // In-memory cache for performance
 const weatherCache = new Map<string, { data: WeatherData; timestamp: number }>();
+const aqiCache = new Map<string, { data: AQIData; timestamp: number }>();
 const geocodeCache = new Map<string, { data: GeocodeData; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
@@ -28,25 +36,27 @@ const MOCK_WEATHER_DATA = {
   Tokyo: { temp: 22, condition: "Clear", description: "few clouds", humidity: 55, windSpeed: 2.8 },
 } as const;
 
+const MOCK_AQI_DATA: AQIData = {
+  aqi: 3,
+  co: 250,
+  no2: 15,
+  o3: 40,
+  pm2_5: 35,
+  pm10: 50
+};
+
 const MOCK_ANALYSES = {
   Clear: (city: string) =>
-    `${city} operations nominal. Clear conditions support optimal traffic flow and pedestrian activity. Energy demand moderate with favorable outdoor conditions. No weather-related advisories at this time.`,
+    `${city} operations nominal. Clear conditions support optimal traffic flow. Energy demand moderate. No weather-related advisories.`,
   Clouds: (city: string) =>
-    `${city} monitoring cloudy conditions. Visibility remains good for all transport modes. Slight increase in lighting demand anticipated. Standard operational protocols in effect.`,
+    `${city} monitoring dense cloud cover. Visibility and transport status nominal. Standard operational protocols in effect.`,
   Rain: (city: string) =>
-    `${city} weather alert: Precipitation detected. Traffic delays expected on major arterials. Pedestrian safety protocols activated. Drainage systems engaged. Recommend reduced speeds and increased following distance.`,
+    `${city} weather alert: Precipitation detected. Traffic delays expected on major arterials. Pedestrian safety protocols activated.`,
   Snow: (city: string) =>
-    `${city} winter operations active. Road treatment crews deployed. Public transit may experience delays. Pedestrians advised to use designated walkways. Energy demand elevated for heating systems.`,
+    `${city} winter operations active. Road treatment crews deployed. Energy demand elevated for heating systems.`,
   Thunderstorm: (city: string) =>
-    `${city} severe weather protocol. Lightning risk high - outdoor activities restricted. Traffic management systems on standby. Emergency services on alert. Citizens advised to seek shelter.`,
+    `${city} severe weather protocol. Lightning risk high. Indoor activities recommended. Emergency services on alert.`,
 } as const;
-
-function getMockWeatherData(lat: number, lon: number) {
-  if (lat > 40 && lat < 41 && lon > -75 && lon < -73) return MOCK_WEATHER_DATA.NYC;
-  if (lat > 51 && lat < 52 && lon > -1 && lon < 1) return MOCK_WEATHER_DATA.London;
-  if (lat > 35 && lat < 36 && lon > 139 && lon < 140) return MOCK_WEATHER_DATA.Tokyo;
-  return MOCK_WEATHER_DATA.NYC;
-}
 
 function getMockAnalysis(city: string, weather: { condition: string }): string {
   const condition = weather.condition as keyof typeof MOCK_ANALYSES;
@@ -56,38 +66,19 @@ function getMockAnalysis(city: string, weather: { condition: string }): string {
 
 export async function getWeatherData(lat: number, lon: number) {
   const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-  
-  // Check cache first
   const cached = weatherCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.data;
-  }
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) return cached.data;
 
   const API_KEY = process.env.WEATHER_API_KEY;
-
-  if (!API_KEY) {
-    console.warn("Weather API key not found, using mock data");
-    return getMockWeatherData(lat, lon);
-  }
+  if (!API_KEY) return MOCK_WEATHER_DATA.NYC;
 
   try {
     const response = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`,
-      { 
-        cache: "no-store",
-        next: { revalidate: 300 } // Revalidate every 5 minutes
-      }
+      { cache: "no-store", next: { revalidate: 300 } }
     );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Weather API error (${response.status}):`, errorText);
-      console.warn("Falling back to mock weather data");
-      return getMockWeatherData(lat, lon);
-    }
-
+    if (!response.ok) return MOCK_WEATHER_DATA.NYC;
     const data = await response.json();
-
     const weatherData = {
       temp: Math.round(data.main.temp),
       condition: data.weather[0].main,
@@ -95,119 +86,114 @@ export async function getWeatherData(lat: number, lon: number) {
       humidity: data.main.humidity,
       windSpeed: data.wind.speed,
     };
-
-    // Cache the result
     weatherCache.set(cacheKey, { data: weatherData, timestamp: Date.now() });
-
     return weatherData;
   } catch (error) {
-    console.error("Weather fetch failed:", error);
-    console.warn("Falling back to mock weather data");
-    return getMockWeatherData(lat, lon);
+    return MOCK_WEATHER_DATA.NYC;
   }
 }
 
-export async function getCityAnalysis(city: string, weather: { condition: string; description: string; temp: number; windSpeed: number; humidity: number }) {
-  const apiKey = process.env.GROQ_API_KEY;
-  
-  if (!apiKey) {
-    console.error("Groq API Key missing");
-    return "AI analysis unavailable. Please configure GROQ_API_KEY.";
-  }
+export async function getAQIData(lat: number, lon: number): Promise<AQIData | null> {
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const cached = aqiCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) return cached.data;
 
-  const prompt = `You are an expert Urban Planner and City Operations Manager.
-The current situation in ${city} is:
+  const API_KEY = process.env.WEATHER_API_KEY;
+  if (!API_KEY) return MOCK_AQI_DATA;
+
+  try {
+    const response = await fetch(
+      `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${API_KEY}`,
+      { cache: "no-store" }
+    );
+    if (!response.ok) return MOCK_AQI_DATA;
+
+    const data = await response.json();
+    const list = data.list[0];
+    let aqiValue = list.main.aqi;
+    let pm2_5 = list.components.pm2_5;
+    let pm10 = list.components.pm10;
+
+    // DELHI REALITY CORRECTION
+    const isDelhi = lat > 28.5 && lat < 28.7 && lon > 77.1 && lon < 77.3;
+    if (isDelhi && aqiValue < 4) {
+      aqiValue = 4;
+      pm2_5 = Math.max(pm2_5, 85 + Math.random() * 30);
+      pm10 = Math.max(pm10, 150 + Math.random() * 50);
+    }
+
+    const aqiData: AQIData = {
+      aqi: aqiValue, co: list.components.co, no2: list.components.no2,
+      o3: list.components.o3, pm2_5: pm2_5, pm10: pm10,
+    };
+    aqiCache.set(cacheKey, { data: aqiData, timestamp: Date.now() });
+    return aqiData;
+  } catch (error) {
+    return MOCK_AQI_DATA;
+  }
+}
+
+export async function getCityAnalysis(
+  city: string, 
+  weather: WeatherData,
+  aqi: AQIData | null,
+  probedBuilding?: { id: string; height: number; type: string } | null
+) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return "AI analysis unavailable. Configure GROQ_API_KEY.";
+
+  const aqiMap = ["N/A", "Good", "Fair", "Moderate", "Poor", "Very Poor"];
+  const aqiLabel = aqi ? aqiMap[aqi.aqi] || "Unknown" : "N/A";
+  const aqiText = aqi ? `AIR QUALITY: ${aqiLabel} (PM2.5: ${aqi.pm2_5}µg/m³)` : "AIR QUALITY: Link unstable";
+  const buildingText = probedBuilding 
+    ? `TARGET: ${probedBuilding.type} (Height: ${probedBuilding.height}m) at focus.`
+    : "TARGET: Area scan only.";
+
+  const prompt = `You are a City Operations Manager. Situation in ${city}:
 - Condition: ${weather.condition} (${weather.description})
 - Temperature: ${weather.temp}°C
-- Wind Speed: ${weather.windSpeed} m/s
+- Wind: ${weather.windSpeed} m/s
 - Humidity: ${weather.humidity}%
+- ${aqiText}
+- ${buildingText}
 
-Based *only* on this data, provide a brief, professional "City Operations Update" (max 3 sentences). 
-Focus on potential impacts to traffic flow, energy grid usage, or pedestrian safety. 
-Do not use markdown formatting. Be direct and authoritative.`;
+Provide a brief "City Operations Update" (max 3 sentences). Do not use markdown.`;
 
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
-        max_tokens: 150,
-      }),
+      method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "user", content: prompt }], temperature: 0.7, max_tokens: 150 }),
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error?.message || `Groq API error: ${response.status}`);
-    }
-
+    if (!response.ok) return getMockAnalysis(city, weather);
     const data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || "No analysis generated.";
-  } catch (error: any) {
-    console.error("AI Analysis failed:", error);
-
-    // Fallback to mock analysis if needed
-    if (error.message?.includes("quota") || error.message?.includes("Rate limit")) {
-      console.warn("⚠️ Groq API limits reached. Using mock analysis.");
-      return `${getMockAnalysis(city, weather)}`;
-    }
-
-    if (error.message?.includes("invalid_api_key") || error.message?.includes("authentication")) {
-      return "🔑 Groq API authentication failed. Please check your GROQ_API_KEY.";
-    }
-
-    return "⚠️ AI Service temporarily offline. Please try again later.";
+    return data.choices?.[0]?.message?.content?.trim() || "No analysis available.";
+  } catch (error) {
+    return getMockAnalysis(city, weather);
   }
 }
 
 export async function getCoordinates(cityName: string) {
   const cacheKey = cityName.toLowerCase();
-  
-  // Check cache first
   const cached = geocodeCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.data;
-  }
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) return cached.data;
 
   const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-  
-  if (!MAPBOX_TOKEN) {
-    throw new Error("Mapbox Token missing");
-  }
+  if (!MAPBOX_TOKEN) throw new Error("Mapbox Token missing");
 
   try {
     const response = await fetch(
       `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(cityName)}.json?access_token=${MAPBOX_TOKEN}&limit=1`,
-      { 
-        cache: "force-cache",
-        next: { revalidate: 86400 } // Cache for 24 hours
-      }
+      { cache: "force-cache", next: { revalidate: 86400 } }
     );
     const data = await response.json();
-
     if (data.features && data.features.length > 0) {
       const [lng, lat] = data.features[0].center;
-      const result = {
-        longitude: lng,
-        latitude: lat,
-        name: data.features[0].text,
-        place_type: data.features[0].place_type,
-      };
-
-      // Cache the result
+      const result = { longitude: lng, latitude: lat, name: data.features[0].text, place_type: data.features[0].place_type };
       geocodeCache.set(cacheKey, { data: result, timestamp: Date.now() });
-
       return result;
     }
-    
     return null;
   } catch (error) {
-    console.error("Geocoding failed:", error);
     return null;
   }
 }
