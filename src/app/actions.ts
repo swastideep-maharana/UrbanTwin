@@ -1,6 +1,6 @@
 "use server";
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+
 
 interface WeatherData {
   temp: number;
@@ -108,15 +108,12 @@ export async function getWeatherData(lat: number, lon: number) {
 }
 
 export async function getCityAnalysis(city: string, weather: { condition: string; description: string; temp: number; windSpeed: number; humidity: number }) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   
   if (!apiKey) {
-    console.error("Gemini API Key missing");
-    return "AI analysis unavailable. Please configure GEMINI_API_KEY.";
+    console.error("Groq API Key missing");
+    return "AI analysis unavailable. Please configure GROQ_API_KEY.";
   }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   const prompt = `You are an expert Urban Planner and City Operations Manager.
 The current situation in ${city} is:
@@ -130,32 +127,41 @@ Focus on potential impacts to traffic flow, energy grid usage, or pedestrian saf
 Do not use markdown formatting. Be direct and authoritative.`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error: unknown) {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 150,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || `Groq API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content?.trim() || "No analysis generated.";
+  } catch (error: any) {
     console.error("AI Analysis failed:", error);
 
-    const err = error as { status?: number; message?: string };
-
-    if (err.status === 429 && err.message?.includes("quota")) {
-      console.warn("⚠️ Gemini API quota exhausted. Using mock analysis.");
+    // Fallback to mock analysis if needed
+    if (error.message?.includes("quota") || error.message?.includes("Rate limit")) {
+      console.warn("⚠️ Groq API limits reached. Using mock analysis.");
       return `${getMockAnalysis(city, weather)}`;
     }
 
-    if (err.status === 429) {
-      return "⏳ Rate limit reached. Please wait 60 seconds before requesting another analysis.";
+    if (error.message?.includes("invalid_api_key") || error.message?.includes("authentication")) {
+      return "🔑 Groq API authentication failed. Please check your GROQ_API_KEY.";
     }
 
-    if (err.status === 401 || err.status === 403) {
-      return "🔑 API authentication failed. Please check your GEMINI_API_KEY.";
-    }
-
-    if (err.message?.includes("API key")) {
-      return "🔑 Invalid API key. Please regenerate your Gemini API key.";
-    }
-
-    return "⚠️ System temporarily offline. Please try again in a moment.";
+    return "⚠️ AI Service temporarily offline. Please try again later.";
   }
 }
 

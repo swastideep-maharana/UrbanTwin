@@ -72,6 +72,10 @@ export const useVoiceCommand = (commands: CommandAction[]) => {
       };
 
       rec.onerror = (e: SpeechRecognitionErrorEvent) => {
+        if (e.error === 'no-speech') {
+          setIsListening(false);
+          return;
+        }
         console.error("Speech recognition error", e.error);
         setIsListening(false);
       };

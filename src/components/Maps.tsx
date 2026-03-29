@@ -357,7 +357,7 @@ const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels 
   }, [showModels]);
 
 
-  // Handle view state changes with debouncing
+// Handle view state changes with debouncing
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -369,13 +369,38 @@ const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels 
         zoom: viewState.zoom,
         essential: true,
         duration: config.FLY_DURATION,
+        curve: 1.5,
+        speed: 1.2,
+        easing: (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2, // easeInOutQuad
       });
     };
 
-    // Debounce rapid view changes
     const debouncedUpdate = debounce(updateView, 100);
     debouncedUpdate();
   }, [viewState.longitude, viewState.latitude, viewState.zoom, config.FLY_DURATION]);
+
+  // Holographic Marker for active location
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+    // Create marker element
+    const el = document.createElement('div');
+    el.className = 'w-10 h-10 relative group';
+    el.innerHTML = `
+      <div class="absolute inset-0 bg-cyan-500/20 rounded-full animate-ping"></div>
+      <div class="absolute inset-0 border-2 border-cyan-400 rounded-full animate-pulse shadow-[0_0_15px_rgba(34,211,238,0.5)]"></div>
+      <div class="absolute inset-[30%] bg-cyan-400 rounded-full shadow-[0_0_10px_rgba(34,211,238,0.8)]"></div>
+      <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-0.5 glass-morphism rounded text-[8px] font-black text-cyan-400 uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">Active Sector</div>
+    `;
+
+    const marker = new mapboxgl.Marker(el)
+      .setLngLat([viewState.longitude, viewState.latitude])
+      .addTo(mapRef.current);
+
+    return () => {
+      marker.remove();
+    };
+  }, [viewState.longitude, viewState.latitude]);
 
   // Handle orbit animation with performance throttling
   useEffect(() => {
@@ -391,8 +416,9 @@ const Map = ({ viewState, isOrbiting, time, performanceLevel, theme, showModels 
       
       if (frameCount % (skipFrames + 1) === 0) {
         const currentBearing = mapRef.current.getBearing();
-        mapRef.current.rotateTo((currentBearing + config.ORBIT_SPEED) % 360, {
-          duration: 0,
+        mapRef.current.easeTo({
+          bearing: (currentBearing + config.ORBIT_SPEED) % 360,
+          duration: 100,
           easing: (t) => t,
         });
       }

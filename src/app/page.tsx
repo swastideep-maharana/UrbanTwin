@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import dynamic from "next/dynamic";
 import ControlPanel from "@/components/ControlPanel";
 import { getWeatherData, getCityAnalysis, getCoordinates } from "@/app/actions";
-import { useVoiceCommand } from "@/hooks/useVoiceCommand";
 import { usePerformance } from "@/hooks/usePerformance";
 
 // Dynamic imports for heavy components - improves initial load time
@@ -22,10 +21,10 @@ const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay"), {
 });
 
 const INITIAL_CITY = {
-  longitude: -74.006,
-  latitude: 40.7128,
-  zoom: 15.5,
-  name: "New York",
+  longitude: 77.2090,
+  latitude: 28.6139,
+  zoom: 12.5,
+  name: "Delhi",
 } as const;
 
 const DEFAULT_ZOOM = 13;
@@ -79,14 +78,11 @@ function Home() {
   // Memoize handleCitySearch to prevent recreation
   const handleCitySearch = useCallback(async (cityName: string) => {
     try {
-      // We expect coords to have place_type now
       const coords = await getCoordinates(cityName);
       if (coords) {
         setActiveCity(coords.name);
         
-        // Smart Zoom: Determine zoom level based on place type
         let newZoom = DEFAULT_ZOOM;
-        
         const isLandmark = coords.place_type && (
           coords.place_type.includes('poi') || 
           coords.place_type.includes('landmark') || 
@@ -94,8 +90,8 @@ function Home() {
         );
 
         if (isLandmark) {
-          newZoom = 17.5; // Close-up for buildings
-          setShowModels(true); // Auto-enable 3D models for landmarks
+          newZoom = 17.5;
+          setShowModels(true);
         }
 
         setViewState({
@@ -128,70 +124,6 @@ function Home() {
     }
   }, [activeCity, weather]);
 
-  // Memoize toggle orbit handler
-  const handleToggleOrbit = useCallback(() => {
-    setIsOrbiting(prev => !prev);
-  }, []);
-
-  // Define Voice Commands - memoized with proper dependencies
-  const commands = useMemo(() => [
-    {
-      keywords: ["analyze", "report", "status", "sector"],
-      action: () => handleAnalyze()
-    },
-    {
-      keywords: ["orbit", "rotate", "spin", "drone", "start"],
-      action: () => setIsOrbiting(true)
-    },
-    {
-      keywords: ["stop", "freeze", "halt"],
-      action: () => setIsOrbiting(false)
-    },
-    {
-      keywords: ["light mode", "day mode", "sun"],
-      action: () => setTheme('light')
-    },
-    {
-      keywords: ["dark mode", "night mode", "moon"],
-      action: () => setTheme('dark')
-    },
-    {
-      keywords: ["models on", "buildings on", "3d on"],
-      action: () => setShowModels(true)
-    },
-    {
-      keywords: ["models off", "buildings off", "3d off"],
-      action: () => setShowModels(false)
-    },
-    {
-      keywords: ["nyc", "new york"],
-      action: () => handleCitySearch("New York")
-    },
-    {
-      keywords: ["london", "uk"],
-      action: () => handleCitySearch("London")
-    },
-    {
-      keywords: ["tokyo", "japan"],
-      action: () => handleCitySearch("Tokyo")
-    },
-    {
-      keywords: ["paris", "france"],
-      action: () => handleCitySearch("Paris")
-    },
-    {
-      keywords: ["dubai"],
-      action: () => handleCitySearch("Dubai")
-    },
-    {
-      keywords: ["singapore"],
-      action: () => handleCitySearch("Singapore")
-    }
-  ], [handleAnalyze, handleCitySearch]);
-
-  // Initialize the voice hook
-  const { isListening, lastTranscript, startListening } = useVoiceCommand(commands);
-
   // Initial weather fetch
   useEffect(() => {
     fetchWeather(INITIAL_CITY.latitude, INITIAL_CITY.longitude);
@@ -204,7 +136,6 @@ function Home() {
 
   return (
     <main className="relative min-h-screen w-full">
-      {/* 1. The Map (Background Layer) - Dynamically loaded */}
       <Map 
         key={theme}
         viewState={viewState} 
@@ -215,7 +146,6 @@ function Home() {
         showModels={showModels}
       />
       
-      {/* 2. Weather Overlay (Particle Layer) - Only render when needed */}
       {shouldShowWeatherOverlay && (
         <WeatherOverlay 
           condition={weather!.condition} 
@@ -224,7 +154,6 @@ function Home() {
         />
       )}
 
-      {/* 3. Control Panel (UI Layer - always on top) */}
       <ControlPanel
         onCitySearch={handleCitySearch}
         selectedCityName={activeCity}
@@ -234,12 +163,9 @@ function Home() {
         analysis={analysis}
         isAnalyzing={isAnalyzing}
         isOrbiting={isOrbiting}
-        onToggleOrbit={handleToggleOrbit}
+        onToggleOrbit={() => setIsOrbiting(prev => !prev)}
         time={time}
         onTimeChange={setTime}
-        onVoiceStart={startListening}
-        isListening={isListening}
-        lastCommand={lastTranscript}
         theme={theme}
         onToggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
         showModels={showModels}
@@ -249,5 +175,4 @@ function Home() {
   );
 }
 
-// Export memoized version to prevent unnecessary re-renders
 export default memo(Home);

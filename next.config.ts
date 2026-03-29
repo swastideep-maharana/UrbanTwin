@@ -17,14 +17,8 @@ const nextConfig: NextConfig = {
   
   // Experimental features for better performance
   experimental: {
-    optimizeCss: true,
+    optimizeCss: false,
     optimizePackageImports: ['lucide-react', '@radix-ui/react-slider', '@radix-ui/react-slot'],
-  },
-  
-  // Turbopack configuration (Next.js 16+)
-  turbopack: {
-    // Empty config to silence the warning - Turbopack works great out of the box!
-    // The default settings are already optimized for performance
   },
   
   // Headers for caching
